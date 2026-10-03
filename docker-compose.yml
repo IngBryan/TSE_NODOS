@@ -1,0 +1,37 @@
+name: tse-nodos
+services:
+  tracking:
+    hostname: tracking
+    container_name: tracking-server
+    build:
+      context: ./tracking
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - OAUTH_CLIENT_ID=${TRACKING_OAUTH_CLIENT_ID}
+      - OAUTH_CLIENT_SECRET=${TRACKING_OAUTH_CLIENT_SECRET}
+      - JWT_SECRET=${TRACKING_JWT_SECRET}
+      - OAUTH_TOKEN_TTL_SECONDS=${TRACKING_OAUTH_TOKEN_TTL_SECONDS:-}
+      - TRACKING_INTERVAL_SECONDS=${TRACKING_INTERVAL_SECONDS:-}
+      - RABBITMQ_HOST=${RABBITMQ_HOST:-host.docker.internal}
+      - RABBITMQ_PORT=${RABBITMQ_PORT:-5672}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # necesario en Linux; en Docker Desktop ya existe
+    restart: unless-stopped
+  balanzas:
+    hostname: balanza
+    container_name: balanza-server
+    build:
+      context: ./balanzas
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=production
+      - OAUTH_CLIENT_ID=${BALANZAS_OAUTH_CLIENT_ID}
+      - OAUTH_CLIENT_SECRET=${BALANZAS_OAUTH_CLIENT_SECRET}
+      - JWT_SECRET=${BALANZAS_JWT_SECRET}
+      - OAUTH_TOKEN_TTL_SECONDS=${BALANZAS_OAUTH_TOKEN_TTL_SECONDS:-}
+    restart: unless-stopped
