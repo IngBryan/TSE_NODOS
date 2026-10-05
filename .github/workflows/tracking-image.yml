@@ -1,0 +1,46 @@
+name: Build imagen tracking
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tracking/**"
+      - ".github/workflows/tracking-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/ingbryan/tracking
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login en GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build y push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./tracking
+          file: ./tracking/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha,scope=tracking
+          cache-to: type=gha,mode=max,scope=tracking
