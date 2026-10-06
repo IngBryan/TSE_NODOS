@@ -35,3 +35,19 @@ services:
       - JWT_SECRET=${BALANZAS_JWT_SECRET}
       - OAUTH_TOKEN_TTL_SECONDS=${BALANZAS_OAUTH_TOKEN_TTL_SECONDS:-}
     restart: unless-stopped
+  pdi:
+    hostname: pdi
+    container_name: pdi-server
+    build:
+      context: ./pdi-service
+    ports:
+      - "3002:8080"   # 8080 lo usa el componente central en el host
+    environment:
+      - PDI_ADMIN_USER=${PDI_ADMIN_USER:-admin}
+      - PDI_ADMIN_PASSWORD=${PDI_ADMIN_PASSWORD}
+      - PDI_ORGANISMO_CODIGO=${PDI_ORGANISMO_CODIGO:-}
+      - PDI_ORGANISMO_NOMBRE=${PDI_ORGANISMO_NOMBRE:-MTOP - carga.uy}
+      - PDI_ORGANISMO_CLAVE=${PDI_ORGANISMO_CLAVE:-}
+      - PDI_SIMULACION_MODO=${PDI_SIMULACION_MODO:-NORMAL}
+      - PDI_SIMULACION_LATENCIA_MS=${PDI_SIMULACION_LATENCIA_MS:-0}
+    restart: unless-stopped

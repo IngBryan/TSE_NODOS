@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Servicio SOAP de administración de la PDI simulada (no forma parte del contrato DNIC).
+  El WSDL se genera a partir de este esquema: /ws/admin.wsdl
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://pdi.carga.uy/admin"
+           targetNamespace="http://pdi.carga.uy/admin"
+           elementFormDefault="qualified">
+
+    <!-- ===== Tipos ===== -->
+
+    <xs:simpleType name="NroDocumento">
+        <xs:restriction base="xs:string">
+            <xs:pattern value="[0-9]{6,8}"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="Nombre">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+            <xs:maxLength value="60"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ModoSimulacionTipo">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="NORMAL"/>
+            <xs:enumeration value="LENTO"/>
+            <xs:enumeration value="CAIDO"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:complexType name="DatosPersona">
+        <xs:sequence>
+            <xs:element name="nroDocumento" type="tns:NroDocumento"/>
+            <xs:element name="nombre1" type="tns:Nombre"/>
+            <xs:element name="nombre2" type="tns:Nombre" minOccurs="0"/>
+            <xs:element name="primerApellido" type="tns:Nombre"/>
+            <xs:element name="segundoApellido" type="tns:Nombre" minOccurs="0"/>
+            <xs:element name="fechaNacimiento" type="xs:date"/>
+            <!-- 1 = masculino, 2 = femenino -->
+            <xs:element name="sexo">
+                <xs:simpleType>
+                    <xs:restriction base="xs:int">
+                        <xs:minInclusive value="1"/>
+                        <xs:maxInclusive value="2"/>
+                    </xs:restriction>
+                </xs:simpleType>
+            </xs:element>
+            <!-- 1 = oriental, 2 = legal, 3 = extranjero -->
+            <xs:element name="codNacionalidad">
+                <xs:simpleType>
+                    <xs:restriction base="xs:int">
+                        <xs:minInclusive value="1"/>
+                        <xs:maxInclusive value="3"/>
+                    </xs:restriction>
+                </xs:simpleType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="EstadoSimulacion">
+        <xs:sequence>
+            <xs:element name="modo" type="tns:ModoSimulacionTipo"/>
+            <xs:element name="latenciaMs" type="xs:long"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- ===== Personas ===== -->
+
+    <xs:element name="AltaPersonaRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="persona" type="tns:DatosPersona"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="AltaPersonaResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="persona" type="tns:DatosPersona"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="ModificarPersonaRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="persona" type="tns:DatosPersona"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="ModificarPersonaResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="persona" type="tns:DatosPersona"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="ConsultarPersonaRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="nroDocumento" type="tns:NroDocumento"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="ConsultarPersonaResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="persona" type="tns:DatosPersona"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="BajaPersonaRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="nroDocumento" type="tns:NroDocumento"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="BajaPersonaResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="nroDocumento" type="tns:NroDocumento"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- ===== Organismos (consumidores autorizados de la PDI) ===== -->
+
+    <xs:element name="AltaOrganismoRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="codigo">
+                    <xs:simpleType>
+                        <xs:restriction base="xs:string">
+                            <xs:pattern value="[A-Z0-9_-]{2,40}"/>
+                        </xs:restriction>
+                    </xs:simpleType>
+                </xs:element>
+                <xs:element name="nombre">
+                    <xs:simpleType>
+                        <xs:restriction base="xs:string">
+                            <xs:minLength value="1"/>
+                            <xs:maxLength value="120"/>
+                        </xs:restriction>
+                    </xs:simpleType>
+                </xs:element>
+                <xs:element name="clave">
+                    <xs:simpleType>
+                        <xs:restriction base="xs:string">
+                            <xs:minLength value="12"/>
+                            <xs:maxLength value="72"/>
+                        </xs:restriction>
+                    </xs:simpleType>
+                </xs:element>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="AltaOrganismoResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="codigo" type="xs:string"/>
+                <xs:element name="activo" type="xs:boolean"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="BajaOrganismoRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="codigo" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="BajaOrganismoResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="codigo" type="xs:string"/>
+                <xs:element name="activo" type="xs:boolean"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- ===== Simulación de fallas (escenario "la PDI no responde") ===== -->
+
+    <xs:element name="ConfigurarSimulacionRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="modo" type="tns:ModoSimulacionTipo"/>
+                <!-- Solo aplica en modo LENTO -->
+                <xs:element name="latenciaMs" minOccurs="0">
+                    <xs:simpleType>
+                        <xs:restriction base="xs:long">
+                            <xs:minInclusive value="0"/>
+                            <xs:maxInclusive value="120000"/>
+                        </xs:restriction>
+                    </xs:simpleType>
+                </xs:element>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="ConfigurarSimulacionResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="estado" type="tns:EstadoSimulacion"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="ConsultarSimulacionRequest">
+        <xs:complexType/>
+    </xs:element>
+    <xs:element name="ConsultarSimulacionResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="estado" type="tns:EstadoSimulacion"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+</xs:schema>

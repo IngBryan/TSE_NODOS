@@ -1,18 +1,19 @@
 # TSE Nodos
 
-Nodos perifericos del laboratorio. Son componentes standalone (Next.js) que se despliegan
+Nodos perifericos del laboratorio. Son componentes standalone (Next.js y Spring Boot) que se despliegan
 **aparte** del componente central (`TSE_CENTRAL`) y se comunican con el.
 
 ```
 TSE_NODOS/
 ├── tracking/            # Mock de GPS: publica posiciones en el RabbitMQ del componente central
 ├── balanzas/            # Mock de balanzas: API consumida por el componente central (OAuth2)
-├── docker-compose.yml   # Levanta tracking y balanzas
+├── pdi-service/         # PDI simulada (Servicio de Informacion DNIC, SOAP, Spring Boot)
+├── docker-compose.yml   # Levanta tracking, balanzas y pdi
 └── .env                 # Credenciales (ignorado por git)
 ```
 
-Cada app tiene su propio README con la API y las variables de entorno. Ambas exponen
-`GET /api/health`.
+Cada app tiene su propio README con la API y las variables de entorno. `tracking` y `balanzas` exponen
+`GET /api/health`; `pdi` expone `GET /actuator/health`.
 
 ## Docker
 
@@ -24,6 +25,7 @@ docker compose up --build
 |------------|------------------------|
 | `tracking` | http://localhost:3000  |
 | `balanzas` | http://localhost:3001  |
+| `pdi`      | http://localhost:3002  |
 
 ### Variables de entorno (`TSE_NODOS/.env`)
 
@@ -49,6 +51,15 @@ RABBITMQ_USER=<mismo-que-en-TSE_CENTRAL>
 RABBITMQ_PASSWORD=<mismo-que-en-TSE_CENTRAL>
 #RABBITMQ_HOST=host.docker.internal   # opcional: donde corre el componente central
 #RABBITMQ_PORT=5672                   # opcional
+
+#PDI (las lee la app con este mismo nombre, sin remapeo)
+PDI_ADMIN_USER=admin
+PDI_ADMIN_PASSWORD=<un-secreto>                      # obligatorio: sin esto el contenedor pdi no arranca
+PDI_ORGANISMO_CODIGO=MTOP-CARGA                      # organismo que usa el central en Organismo / ClaveAcceso1
+PDI_ORGANISMO_CLAVE=<minimo-12-caracteres>
+#PDI_ORGANISMO_NOMBRE=MTOP - carga.uy               # opcional
+#PDI_SIMULACION_MODO=NORMAL                         # opcional: NORMAL | LENTO | CAIDO
+#PDI_SIMULACION_LATENCIA_MS=0                       # opcional (modo LENTO)
 ```
 
 Usar secretos distintos por servicio. Los valores se inyectan al crear el contenedor: si se
