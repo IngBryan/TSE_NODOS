@@ -29,7 +29,7 @@ WeighingEvent { id, scaleId, licensePlate, datetime /* ISO 8601 */, weight /* kg
 | `GET`    | `/api/scales/:id`              | Obtiene una balanza                                               |
 | `PUT`    | `/api/scales/:id`              | Modificacion (completa)                                           |
 | `DELETE` | `/api/scales/:id`              | Baja logica: pasa a `active: false` y devuelve la balanza. Sus pesajes se conservan |
-| `GET`    | `/api/weighings`               | Consulta de pesajes (solo lectura). Filtros: `scaleId`, `licensePlate`, `from`, `to` |
+| `GET`    | `/api/scales/:id/weighings?from=&to=&licensePlate=` | Pesajes de una balanza en un rango de fechas (inclusive, ISO 8601). `from` y `to` obligatorios; `licensePlate` opcional. Tambien para balanzas dadas de baja |
 
 Errores: `{ "error": string, "details"?: string[] }` con `400`, `401` o `404`.
 
@@ -74,10 +74,10 @@ curl -X POST localhost:3001/api/oauth/token \
 # { "access_token": "eyJ...", "token_type": "Bearer", "expires_in": 3600 }
 ```
 
-2. Usarlo, por ejemplo para obtener los pesajes de un vehiculo en una fecha:
+2. Usarlo, por ejemplo para obtener los pesajes de un vehiculo en la balanza 1 en una fecha:
 
 ```bash
-curl "localhost:3001/api/weighings?licensePlate=SBC1234&from=2026-09-29T00:00:00Z&to=2026-09-29T23:59:59Z" \
+curl "localhost:3001/api/scales/1/weighings?licensePlate=SBC1234&from=2026-09-29T00:00:00Z&to=2026-09-29T23:59:59Z" \
   -H "Authorization: Bearer <access_token>"
 ```
 
