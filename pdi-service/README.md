@@ -11,7 +11,7 @@ Observabilidad: `/actuator/health`, `/actuator/prometheus` (métrica `pdi_consul
 
 ## Levantar
 
-Con Docker se levanta desde el `docker-compose.yml` de la raíz de `TSE_NODOS` (servicio `pdi`, en `http://localhost:3002`), junto con los demás nodos. Las variables `PDI_*` se definen en el `.env` de la raíz o las pasa el CI/CD (ver el README de la raíz).
+Con Docker se levanta desde el `docker-compose.yml` de la raíz de `TSE_NODOS` (servicio `pdi`, en `http://localhost:3005`), junto con los demás nodos. Las variables `PDI_*` se definen en el `.env` de la raíz o las pasa el CI/CD (ver el README de la raíz).
 
 ```bash
 cd ..

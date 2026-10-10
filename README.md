@@ -25,7 +25,7 @@ docker compose up --build
 |------------|------------------------|
 | `tracking` | http://localhost:3000  |
 | `balanzas` | http://localhost:3001  |
-| `pdi`      | http://localhost:3002  |
+| `pdi`      | http://localhost:3005  |
 
 ### Variables de entorno (`TSE_NODOS/.env`)
 

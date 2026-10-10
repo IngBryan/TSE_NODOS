@@ -41,7 +41,7 @@ services:
     build:
       context: ./pdi-service
     ports:
-      - "3002:8080"   # 8080 lo usa el componente central en el host
+      - "3005:8080"   # 8080 y 3002-3004 los usa el componente central en el host
     environment:
       - PDI_ADMIN_USER=${PDI_ADMIN_USER:-admin}
       - PDI_ADMIN_PASSWORD=${PDI_ADMIN_PASSWORD}
