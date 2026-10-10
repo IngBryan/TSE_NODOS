@@ -49,6 +49,11 @@
 			<groupId>wsdl4j</groupId>
 			<artifactId>wsdl4j</artifactId>
 		</dependency>
+		<!-- WS-Security (WSS4J) para el servicio DNIC -->
+		<dependency>
+			<groupId>org.springframework.ws</groupId>
+			<artifactId>spring-ws-security</artifactId>
+		</dependency>
 		<!-- Solo BCrypt para las claves de organismo (sin Spring Security completo) -->
 		<dependency>
 			<groupId>org.springframework.security</groupId>

@@ -46,3 +46,5 @@ pdi:
   simulacion:
     modo: ${PDI_SIMULACION_MODO:NORMAL}
     latencia-ms: ${PDI_SIMULACION_LATENCIA_MS:0}
+  ws-security:
+    timestamp-ttl-segundos: ${PDI_WSS_TIMESTAMP_TTL_SEGUNDOS:300}

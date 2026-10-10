@@ -11,7 +11,7 @@ class SimulacionServiceTest {
 
 	private final SimulacionService service = new SimulacionService(new PdiProperties(
 			new PdiProperties.Admin("admin", "x"), new PdiProperties.OrganismoInicial(null, null, null),
-			new PdiProperties.Simulacion(ModoSimulacion.NORMAL, 0)));
+			new PdiProperties.Simulacion(ModoSimulacion.NORMAL, 0), new PdiProperties.WsSecurity(300)));
 
 	@Test
 	void arrancaConLaConfiguracionInicial() {

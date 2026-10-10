@@ -1,16 +1,14 @@
 package uy.carga.pdi.dnic;
 
 /**
- * Códigos que se devuelven en {@code objResult.Errores}. Son propios de esta simulación (no los de DNIC) y el
- * componente central los traduce a los resultados de CU-03.
+ * Códigos que se devuelven en {@code objResult.Errores}. El
+ * componente central los traduce a los resultados de CU-03. La autenticación del organismo ya no es un error de
+ * negocio: si falla, WS-Security responde un SOAP Fault antes de llegar acá.
  */
 public enum CodigoMensaje {
 
 	/** CU-03 → NO_EXISTE. */
 	PERSONA_NO_ENCONTRADA(1001, "No se encontró una persona con el documento indicado"),
-
-	/** Organismo inexistente, inactivo o clave de acceso incorrecta. */
-	ORGANISMO_NO_AUTORIZADO(2001, "Organismo o clave de acceso inválidos"),
 
 	/** Número de documento ausente o con formato inválido. */
 	DOCUMENTO_INVALIDO(3001, "Número de documento inválido"),

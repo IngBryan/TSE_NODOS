@@ -10,7 +10,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 
 /**
- * Organismo autorizado a consumir la PDI (p. ej. el componente central de carga.uy). Se identifica con el campo
+ * Organismo autorizado a consumir la PDI (carga.uy). Se identifica con el campo
  * {@code Organismo} del request y se autentica con {@code ClaveAcceso1}, guardada como hash BCrypt.
  */
 @Entity

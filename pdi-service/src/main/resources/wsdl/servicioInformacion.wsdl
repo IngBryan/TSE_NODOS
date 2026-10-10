@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Contrato del Servicio de Información DNIC, tal cual lo publica la PDI.
-  Único cambio respecto al original: soap:address tiene una URL (Spring-WS la reescribe con el host real).
+  Cambios respecto al original: soap:address tiene una URL (Spring-WS la reescribe con el host real) y se
+  declara WS-Addressing (wsaw:UsingAddressing y wsam:Action). Los tipos y mensajes no cambian.
   No recortar campos: el contrato debe respetar la interfaz de DNIC.
 -->
-<wsdl:definitions xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" xmlns:tm="http://microsoft.com/wsdl/mime/textMatching/" xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/" xmlns:mime="http://schemas.xmlsoap.org/wsdl/mime/" xmlns:tns="http://wsServicioDeInformacion/" xmlns:s="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://schemas.xmlsoap.org/wsdl/soap12/" xmlns:http="http://schemas.xmlsoap.org/wsdl/http/" targetNamespace="http://wsServicioDeInformacion/" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">
+<wsdl:definitions xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" xmlns:tm="http://microsoft.com/wsdl/mime/textMatching/" xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/" xmlns:mime="http://schemas.xmlsoap.org/wsdl/mime/" xmlns:tns="http://wsServicioDeInformacion/" xmlns:s="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://schemas.xmlsoap.org/wsdl/soap12/" xmlns:http="http://schemas.xmlsoap.org/wsdl/http/" targetNamespace="http://wsServicioDeInformacion/" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:wsam="http://www.w3.org/2007/05/addressing/metadata" xmlns:wsaw="http://www.w3.org/2006/05/addressing/wsdl">
   <wsdl:documentation xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">Interfaz de Servicios de Informacion-DNIC</wsdl:documentation>
   <wsdl:types>
     <s:schema elementFormDefault="qualified" targetNamespace="http://wsServicioDeInformacion/">
@@ -125,16 +126,18 @@
   </wsdl:message>
   <wsdl:portType name="wsServicioDeInformacionSoap">
     <wsdl:operation name="obtDocDigitalizado">
-      <wsdl:input message="tns:obtDocDigitalizadoSoapIn" />
-      <wsdl:output message="tns:obtDocDigitalizadoSoapOut" />
+      <wsdl:input message="tns:obtDocDigitalizadoSoapIn" wsam:Action="http://wsServicioDeInformacion/obtDocDigitalizado" />
+      <wsdl:output message="tns:obtDocDigitalizadoSoapOut" wsam:Action="http://wsServicioDeInformacion/obtDocDigitalizadoResponse" />
     </wsdl:operation>
     <wsdl:operation name="ProductDesc">
-      <wsdl:input message="tns:ProductDescSoapIn" />
-      <wsdl:output message="tns:ProductDescSoapOut" />
+      <wsdl:input message="tns:ProductDescSoapIn" wsam:Action="http://wsServicioDeInformacion/ProductDesc" />
+      <wsdl:output message="tns:ProductDescSoapOut" wsam:Action="http://wsServicioDeInformacion/ProductDescResponse" />
     </wsdl:operation>
   </wsdl:portType>
   <wsdl:binding name="wsServicioDeInformacionSoap" type="tns:wsServicioDeInformacionSoap">
     <soap:binding transport="http://schemas.xmlsoap.org/soap/http" />
+    <!-- WS-Addressing obligatorio. Además se exige WS-Security: wsu:Timestamp + wsse:UsernameToken (PasswordText). -->
+    <wsaw:UsingAddressing wsdl:required="true" />
     <wsdl:operation name="obtDocDigitalizado">
       <soap:operation soapAction="http://wsServicioDeInformacion/obtDocDigitalizado" style="document" />
       <wsdl:input>

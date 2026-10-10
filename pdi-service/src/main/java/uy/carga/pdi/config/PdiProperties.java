@@ -16,7 +16,12 @@ import uy.carga.pdi.simulacion.ModoSimulacion;
 public record PdiProperties(
 		@Valid @NotNull Admin admin,
 		@Valid @NotNull OrganismoInicial organismoInicial,
-		@Valid @NotNull Simulacion simulacion) {
+		@Valid @NotNull Simulacion simulacion,
+		@Valid @NotNull WsSecurity wsSecurity) {
+
+	/** Vigencia máxima aceptada para el wsu:Timestamp del header WS-Security. */
+	public record WsSecurity(@Min(1) int timestampTtlSegundos) {
+	}
 
 	/** Credenciales HTTP Basic del servicio SOAP de administración. */
 	public record Admin(@NotBlank String usuario, @NotBlank String password) {

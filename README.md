@@ -55,11 +55,12 @@ RABBITMQ_PASSWORD=<mismo-que-en-TSE_CENTRAL>
 #PDI (las lee la app con este mismo nombre, sin remapeo)
 PDI_ADMIN_USER=admin
 PDI_ADMIN_PASSWORD=<un-secreto>                      # obligatorio: sin esto el contenedor pdi no arranca
-PDI_ORGANISMO_CODIGO=MTOP-CARGA                      # organismo que usa el central en Organismo / ClaveAcceso1
-PDI_ORGANISMO_CLAVE=<minimo-12-caracteres>
+PDI_ORGANISMO_CODIGO=MTOP-CARGA                      # usuario del wsse:UsernameToken que manda el central
+PDI_ORGANISMO_CLAVE=<minimo-12-caracteres>          # password (PasswordText) del UsernameToken
 #PDI_ORGANISMO_NOMBRE=MTOP - carga.uy               # opcional
 #PDI_SIMULACION_MODO=NORMAL                         # opcional: NORMAL | LENTO | CAIDO
 #PDI_SIMULACION_LATENCIA_MS=0                       # opcional (modo LENTO)
+#PDI_WSS_TIMESTAMP_TTL_SEGUNDOS=300                 # opcional: vigencia máxima del wsu:Timestamp
 ```
 
 Usar secretos distintos por servicio. Los valores se inyectan al crear el contenedor: si se

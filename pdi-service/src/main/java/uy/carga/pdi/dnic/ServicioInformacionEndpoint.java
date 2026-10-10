@@ -6,11 +6,11 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ws.context.MessageContext;
 import org.springframework.ws.server.endpoint.annotation.Endpoint;
-import org.springframework.ws.server.endpoint.annotation.PayloadRoot;
 import org.springframework.ws.server.endpoint.annotation.RequestPayload;
 import org.springframework.ws.server.endpoint.annotation.ResponsePayload;
-import uy.carga.pdi.config.WebServiceConfig;
+import org.springframework.ws.soap.addressing.server.annotation.Action;
 import uy.carga.pdi.dnic.ws.ArrayOfMensaje;
 import uy.carga.pdi.dnic.ws.Mensaje;
 import uy.carga.pdi.dnic.ws.ObjParamObtDocDigitalizado;
@@ -22,6 +22,8 @@ import uy.carga.pdi.dnic.ws.ProductDesc;
 import uy.carga.pdi.dnic.ws.ProductDescResponse;
 import uy.carga.pdi.dnic.ws.ResultObtDocDigitalizado;
 import uy.carga.pdi.persona.Persona;
+import uy.carga.pdi.seguridad.OrganismoAutenticado;
+import uy.carga.pdi.seguridad.WsAddressingAcciones;
 import uy.carga.pdi.simulacion.SimulacionService;
 
 /** Implementación del contrato DNIC (wsServicioDeInformacion). */
@@ -45,14 +47,19 @@ public class ServicioInformacionEndpoint {
 		this.simulacionService = simulacionService;
 	}
 
-	@PayloadRoot(namespace = WebServiceConfig.DNIC_NAMESPACE, localPart = "obtDocDigitalizado")
+	/**
+	 * Se despacha solo por wsa:Action (WS-Addressing obligatorio). El organismo es el del UsernameToken; los campos
+	 * Organismo/ClaveAcceso1 del Body se ignoran.
+	 */
+	@Action(value = WsAddressingAcciones.OBT_DOC_DIGITALIZADO, output = WsAddressingAcciones.OBT_DOC_DIGITALIZADO_RESPONSE)
 	@ResponsePayload
-	public ObtDocDigitalizadoResponse obtDocDigitalizado(@RequestPayload ObtDocDigitalizado request) {
+	public ObtDocDigitalizadoResponse obtDocDigitalizado(@RequestPayload ObtDocDigitalizado request,
+			MessageContext messageContext) {
 		simulacionService.aplicar();
 
 		ObjParamObtDocDigitalizado param = request.getParamObtDocDigitalizado() != null
 				? request.getParamObtDocDigitalizado() : new ObjParamObtDocDigitalizado();
-		SolicitudConsulta solicitud = new SolicitudConsulta(param.getOrganismo(), param.getClaveAcceso1(),
+		SolicitudConsulta solicitud = new SolicitudConsulta(OrganismoAutenticado.de(messageContext),
 				param.getTipoDocumento(), param.getNrodocumento(), param.getIdSolicitud());
 
 		ResultadoConsulta resultado = consultaPersonaService.consultar(solicitud);
@@ -65,7 +72,7 @@ public class ServicioInformacionEndpoint {
 		return response;
 	}
 
-	@PayloadRoot(namespace = WebServiceConfig.DNIC_NAMESPACE, localPart = "ProductDesc")
+	@Action(value = WsAddressingAcciones.PRODUCT_DESC, output = WsAddressingAcciones.PRODUCT_DESC_RESPONSE)
 	@ResponsePayload
 	public ProductDescResponse productDesc(@RequestPayload ProductDesc request) {
 		simulacionService.aplicar();

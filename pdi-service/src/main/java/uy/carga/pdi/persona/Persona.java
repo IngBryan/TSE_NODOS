@@ -13,7 +13,7 @@ import java.time.LocalDate;
 
 /**
  * Persona del registro simulado de DNIC. Solo se guardan los campos que usa carga.uy; el resto de
- * {@code objPersona} se responde vacío.
+ * {@code objPersona} respondemos vacío.
  */
 @Entity
 @Table(name = "persona")
