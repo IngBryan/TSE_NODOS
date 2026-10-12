@@ -30,7 +30,7 @@ Datos en memoria (`src/lib/store.ts`), con algunos datos semilla. Se pierden al 
 
 ```ts
 GpsDevice     { id, licensePlate /* vehiculo */, active }
-TrackingEvent { id, gpsId, latitude, longitude, datetime /* ISO 8601 */ }  // sin endpoints, se publican a RabbitMQ
+TrackingEvent { id, gpsId, latitude, longitude, datetime /* ISO 8601 en hora de Uruguay (-03:00) */ }  // sin endpoints, se publican a RabbitMQ
 ```
 
 | Metodo   | Ruta                     | Descripcion                                                        |
@@ -51,7 +51,7 @@ TrackingEvent { id, gpsId, latitude, longitude, datetime /* ISO 8601 */ }  // si
 con routing key `tracking.event` (`src/lib/tracking.ts`, `src/lib/rabbitmq.ts`).
 
 ```json
-{ "id": 4, "gpsId": 1, "licensePlate": "SBC1234", "latitude": -34.6658, "longitude": -56.6511, "datetime": "2026-10-02T23:50:40.285Z" }
+{ "id": 4, "gpsId": 1, "licensePlate": "SBC1234", "latitude": -34.6658, "longitude": -56.6511, "datetime": "2026-10-02T20:50:40.285-03:00" }
 ```
 
 - La app **no declara** exchange ni cola: la topologia la define RabbitMQ

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { toUruguayIsoString } from "./datetime";
 import {
   getRabbitConfig,
   publishJson,
@@ -57,7 +58,7 @@ function reportPositions() {
       gpsId: device.id,
       latitude: Math.max(-90, Math.min(90, last.latitude + step())),
       longitude: Math.max(-180, Math.min(180, last.longitude + step())),
-      datetime: new Date().toISOString(),
+      datetime: toUruguayIsoString(new Date()),
     });
     sim.pending.push({
       messageId: randomUUID(),
