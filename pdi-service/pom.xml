@@ -17,6 +17,9 @@
 	<properties>
 		<java.version>21</java.version>
 		<jaxb-maven-plugin.version>4.0.9</jaxb-maven-plugin.version>
+		<!-- H2 2.4.240 (el que trae Spring Boot) ata los CHECK a la conexion que creo la tabla: cuando Hikari la
+		     recicla, todo INSERT en persona falla con "Check constraint invalid". Ver AltaTrasReciclarConexionesTest. -->
+		<h2.version>2.3.232</h2.version>
 	</properties>
 
 	<dependencies>

@@ -58,4 +58,4 @@ Errores (en `Errores/Mensaje/CodMensaje`, respuesta HTTP 200):
 
 ## Datos de prueba (ficticios)
 
-`11111111`, `22222222`, `77777777` mayores · `33333333` 16 años · `44444444` cumple 18 el día de la migración · `55555555` cumple 18 al día siguiente · `66666666` dado de baja. El organismo se crea al arrancar desde `PDI_ORGANISMO_CODIGO` / `PDI_ORGANISMO_CLAVE` (clave guardada con BCrypt).
+`11111111`, `22222222`, `77777777` mayores · `33333333` 16 años · `44444444` cumple 18 el día de la migración · `55555555` cumple 18 al día siguiente · `66666666` dado de baja. Personas del equipo (V3): `54074380` Emiliano Tomas Martinez `56087406` Bryan Salamone Varela y `48060995` Alejandro Orellano Prantl, mayores. El organismo se crea al arrancar desde `PDI_ORGANISMO_CODIGO` / `PDI_ORGANISMO_CLAVE` (clave guardada con BCrypt).
