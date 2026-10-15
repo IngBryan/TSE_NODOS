@@ -15,11 +15,12 @@ function seed(): Db {
     { id: 1, name: "Ruta 1 - Km 45", latitude: -34.6631, longitude: -56.6519, active: true },
     { id: 2, name: "Ruta 5 - Km 95", latitude: -34.2956, longitude: -56.2378, active: true },
     { id: 3, name: "Ruta 8 - Km 120", latitude: -34.4111, longitude: -55.0539, active: false },
+    { id: 4, name: "Ruta 8 - Km 150", latitude: -34.1234, longitude: -55.5678, active: true }
   ];
   const weighings: WeighingEvent[] = [
     { id: 1, scaleId: 1, licensePlate: "SBC1234", datetime: "2026-09-29T08:15:00.000Z", weight: 18450 },
     { id: 2, scaleId: 1, licensePlate: "STU5678", datetime: "2026-09-29T09:42:00.000Z", weight: 32100 },
-    { id: 3, scaleId: 2, licensePlate: "SBC1234", datetime: "2026-09-29T11:05:00.000Z", weight: 18390 },
+    { id: 3, scaleId: 4, licensePlate: "SBC1234", datetime: "2026-09-29T11:05:00.000Z", weight: 18390 },
     { id: 4, scaleId: 2, licensePlate: "AAB9012", datetime: "2026-09-30T07:30:00.000Z", weight: 45200 },
   ];
   return {
