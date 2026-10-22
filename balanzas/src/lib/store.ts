@@ -35,6 +35,7 @@ function seed(): Db {
 
 const g = globalThis as unknown as { __balanzasDb?: Db };
 const db = (g.__balanzasDb ??= seed());
+const URUGUAY_OFFSET_MS = -3 * 60 * 60 * 1000;
 
 // Scales
 
@@ -90,7 +91,7 @@ export function createWeighing(scaleId: number, licensePlate: string, weight: nu
     id: db.nextWeighingId++,
     scaleId,
     licensePlate: normalizedPlate,
-    datetime: new Date(timestamp).toISOString(),
+    datetime: toUruguayIso(timestamp),
     weight,
   };
   db.weighings.set(weighing.id, weighing);
@@ -106,4 +107,9 @@ export function listWeighings(
     .filter((w) => !filter.from || new Date(w.datetime) >= filter.from)
     .filter((w) => !filter.to || new Date(w.datetime) <= filter.to)
     .sort((a, b) => a.datetime.localeCompare(b.datetime));
+}
+
+//helpers
+function toUruguayIso(ms: number): string {
+  return new Date(ms + URUGUAY_OFFSET_MS).toISOString().replace("Z", "-03:00");
 }
