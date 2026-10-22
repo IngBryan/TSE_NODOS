@@ -1,6 +1,8 @@
 import type { Scale, ScaleInput, WeighingEvent } from "./types";
 
 // In-memory mock store. Data is lost on restart.
+// Demo weighings are explicitly added using POST /api/scales/:id/weighings.
+// No background generator or random weights: the presenter controls each event.
 // Kept on globalThis so it survives hot reloads in `next dev`.
 
 interface Db {
@@ -70,6 +72,30 @@ export function deactivateScale(id: number): Scale | undefined {
 }
 
 // Weighing events
+
+/**
+ * Creates an independent weighing event at the time the mock received it.
+ * Central identifies events by (licensePlate, datetime), NOT by external id.
+ * Use distinct millisecond timestamps even for two fast requests for the same vehicle.
+ */
+export function createWeighing(scaleId: number, licensePlate: string, weight: number): WeighingEvent {
+  const normalizedPlate = licensePlate.trim().toUpperCase().replace(/[\s-]+/g, "");
+  let timestamp = Date.now();
+  for (const existing of db.weighings.values()) {
+    if (existing.licensePlate === normalizedPlate) {
+      timestamp = Math.max(timestamp, Date.parse(existing.datetime) + 1);
+    }
+  }
+  const weighing: WeighingEvent = {
+    id: db.nextWeighingId++,
+    scaleId,
+    licensePlate: normalizedPlate,
+    datetime: new Date(timestamp).toISOString(),
+    weight,
+  };
+  db.weighings.set(weighing.id, weighing);
+  return weighing;
+}
 
 export function listWeighings(
   filter: { scaleId?: number; licensePlate?: string; from?: Date; to?: Date } = {},
