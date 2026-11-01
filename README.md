@@ -45,6 +45,7 @@ TRACKING_OAUTH_CLIENT_SECRET=<otro-secreto>
 TRACKING_JWT_SECRET=<otro-minimo-32-caracteres>
 TRACKING_OAUTH_TOKEN_TTL_SECONDS=3600
 #TRACKING_INTERVAL_SECONDS=10   # opcional: cada cuanto reporta cada GPS
+#TRACKING_SPEED_KMH=80         # opcional: velocidad simulada sobre geometria real
 
 #RabbitMQ del componente central (credenciales con las que tracking publica)
 RABBITMQ_USER=<mismo-que-en-TSE_CENTRAL>
