@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getScale, listWeighings } from "@/lib/store";
-import { errorResponse, parseId } from "@/lib/validation";
+import { createWeighing, getScale, listWeighings } from "@/lib/store";
+import { errorResponse, parseId, readJson } from "@/lib/validation";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -40,4 +40,33 @@ export async function GET(request: Request, { params }: Context) {
       to,
     }),
   );
+}
+
+// POST /api/scales/:id/weighings
+// Inject an explicit weighing into the in-memory peripheral mock for demos.
+// The standard GET contract and the Central poller remain unchanged.
+// Body: { "licensePlate": "STU5678", "weight": 39000 }
+export async function POST(request: Request, { params }: Context) {
+  const id = parseId((await params).id);
+  const scale = id && getScale(id);
+  if (!scale) return errorResponse(404, "Scale not found");
+  if (!scale.active) return errorResponse(409, "Scale is inactive");
+
+  const body = await readJson(request);
+  if (!body) return errorResponse(400, "Invalid JSON body");
+
+  const { licensePlate, weight } = body;
+  const normalizedPlate = typeof licensePlate === "string"
+    ? licensePlate.trim().toUpperCase().replace(/[\s-]+/g, "")
+    : "";
+  const errors: string[] = [];
+  if (!/^[A-Z0-9]{6,8}$/.test(normalizedPlate)) {
+    errors.push("licensePlate must be 6-8 letters/numbers");
+  }
+  if (!Number.isSafeInteger(weight) || (weight as number) <= 0) {
+    errors.push("weight must be a positive integer in kg");
+  }
+  if (errors.length) return errorResponse(400, "Validation failed", errors);
+
+  return NextResponse.json(createWeighing(id, normalizedPlate, weight as number), { status: 201 });
 }
