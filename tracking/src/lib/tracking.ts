@@ -11,6 +11,10 @@ import {
   selectedRoute, type DeviceScenarioConfig,
 } from "./route-scenarios";
 import type { TrackingEvent } from "./types";
+import {
+  createAcceleratedClock, wallIntervalMs, type AcceleratedClock,
+  type SimulationSpeedFactor,
+} from "./simulation-clock";
 
 /** Each active, configured device follows its own real road geometry. */
 const DEFAULT_INTERVAL_SECONDS = 10;
@@ -32,6 +36,8 @@ interface Simulator {
   pending: PendingMessage[];
   flushing: boolean;
   runs: Map<number, DeviceRun>;
+  factor?: SimulationSpeedFactor;
+  clock?: AcceleratedClock;
 }
 
 // Same in-memory ownership model as the original mock; persists across Next dev hot reloads.
@@ -91,19 +97,23 @@ export function getTrackingStatus() {
     flushing: sim.flushing,
     intervalSeconds: intervalSeconds(),
     speedKmh: speedKmh(),
+    simulationSpeedFactor: isTrackingOn() ? (sim.factor ?? 1) : 1,
+    simulatedStartAt: isTrackingOn() ? (sim.clock?.simulatedStartAt ?? null) : null,
     configuredDevices: [...sim.runs.keys()].map((id) => getDeviceScenario(id)),
   };
 }
 
 /** Same RabbitMQ message shape as before: no extra scenario/deviation flags. */
 function reportPositions() {
+  // A single measurement instant for all devices in the same tick.
+  const simulatedMeasurement = sim.clock?.nextMeasurement();
   for (const device of listGpsDevices({ active: true })) {
     const run = sim.runs.get(device.id);
     if (!run || run.finished) continue;
     const route: LineString = selectedRoute(run.config);
     const [longitude, latitude] = positionAtDistance(route, run.traveledMeters);
     const event = addTrackingEvent({
-      gpsId: device.id, latitude, longitude, datetime: toUruguayIsoString(new Date()),
+      gpsId: device.id, latitude, longitude, datetime: toUruguayIsoString(simulatedMeasurement ?? new Date()),
     });
     sim.pending.push({
       messageId: randomUUID(),
@@ -145,7 +155,8 @@ export function getTrackingOn(): boolean {
   return isTrackingOn();
 }
 
-export function setTracking(on: boolean): boolean {
+/** Optional factor only applies to this run; omitted means the legacy 1x mode. */
+export function setTracking(on: boolean, requestedFactor?: SimulationSpeedFactor): boolean {
   if (on && !isTrackingOn()) {
     assertSafeToChange();
     getRabbitConfig();
@@ -153,17 +164,31 @@ export function setTracking(on: boolean): boolean {
     if (!active.length || active.some((device) => !sim.runs.has(device.id))) {
       throw new TrackingScenarioConflict("Configure a road scenario for every active GPS device before starting");
     }
+    const factor = requestedFactor ?? 1;
+    const publishEveryMs = wallIntervalMs(intervalSeconds(), factor);
+    // Calculate the backdated virtual clock BEFORE changing any simulator state.
+    const clock = factor === 1 ? undefined : createAcceleratedClock(
+      Date.now(),
+      Math.max(...active.map(device => routeLengthMeters(selectedRoute(sim.runs.get(device.id)!.config)))),
+      intervalSeconds(), speedKmh(),
+    );
     for (const run of sim.runs.values()) {
       run.traveledMeters = 0;
       run.finished = false;
     }
+    sim.factor = factor;
+    sim.clock = clock;
     setTrackingOn(true);
-    sim.timer = setInterval(() => void tick(), intervalSeconds() * 1000);
+    sim.timer = setInterval(() => void tick(), publishEveryMs);
     void tick();
+  } else if (on && requestedFactor !== undefined && requestedFactor !== (sim.factor ?? 1)) {
+    throw new TrackingScenarioConflict("Stop tracking before changing the simulation speed factor");
   } else if (!on) {
     if (sim.timer) clearInterval(sim.timer);
     sim.timer = undefined;
     setTrackingOn(false);
+    sim.factor = 1;
+    sim.clock = undefined;
     void flush(); // keep pending messages on failure
   }
   return isTrackingOn();

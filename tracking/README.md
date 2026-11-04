@@ -226,6 +226,63 @@ original de `TSE_NODOS`. Al reiniciar el contenedor se pierden configuraciones
 GPS y publicaciones pendientes no confirmadas. Este servicio asume una sola
 instancia (no escalar replicas independientes del simulador).
 
+
+#### Aceleracion temporal opcional para demos (5C)
+
+El `PUT /api/tracking-on` conserva su contrato anterior: `{"trackingOn":true}`
+arranca siempre en **1x** y utiliza `new Date()` en cada reporte, igual que antes.
+No se agrega una variable global en `.env`: ninguna otra demo cambia de velocidad
+por haber ejecutado una prueba acelerada.
+
+Opcionalmente, **al arrancar una ejecucion con tracking detenido y sin pendientes**:
+
+```http
+PUT /api/tracking-on
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"trackingOn":true,"simulationSpeedFactor":20}
+```
+
+Los factores permitidos son **1, 5, 10, 20**. Con un intervalo GPS de 10 s
+(`TRACKING_INTERVAL_SECONDS`) y velocidad vehicular de 80 km/h:
+
+| Factor | Tiempo real entre emisiones | Tiempo GPS entre mediciones | Avance por punto |
+|---|---|---|---|
+| 1x | 10 s | 10 s | ~222 m |
+| 5x | 2 s | 10 s | ~222 m |
+| 10x | 1 s | 10 s | ~222 m |
+| 20x | 0,5 s | 10 s | ~222 m |
+
+La **distancia, geometria y velocidad fisica** no cambian. En ejecuciones
+aceleradas un reloj virtual compartido por los GPS activos mantiene la separacion
+GPS de 10 s aunque las publicaciones se hagan mas rapido. El ultimo timestamp
+planificado se ancla a la hora de arranque, para evitar posiciones futuras.
+`GET /api/tracking-on` incluye `simulationSpeedFactor` y `simulatedStartAt`
+(UTC ISO, nulo en modo normal). El formato de `tracking.event` **no cambia**.
+
+**Precondicion importante de integracion:** la guia en Central debe tener
+`fechaAsignacion` **anterior o igual** a `simulatedStartAt`, y no debe tener
+un fin efectivo anterior a las mediciones. Ejemplo: un viaje de 125 km a 80 km/h
+necesita cerca de 94 minutos de historia de asignacion. Si acabas de asignar
+una guia nueva y arrancas inmediatamente a 20x, la fecha virtual inicial
+puede quedar antes de la asignacion; Fiscalizacion no debe asociar esos eventos.
+Preparar una guia de demo asignada con suficiente antiguedad y comprobar
+`simulatedStartAt` al iniciar. No se alteran ni falsifican reglas del Central.
+Asimismo, evitar ejecutar dos simulaciones con ventanas de timestamps
+superpuestas para la misma matricula: MongoDB mantiene historial por GPS.
+
+Si `TRACKING_INTERVAL_SECONDS / factor` seria menor a 0,2 s, la solicitud
+se rechaza para evitar una tasa de publicacion excesiva. Para volver a 1x,
+detener con `{"trackingOn":false}`, esperar `pendingMessages=0` y
+`flushing=false`, y arrancar con `{"trackingOn":true}`. El factor acelerado
+no persiste entre ejecuciones. No es necesario cambiar el Docker Compose.
+
+**Aviso de despliegue:** Tracking mantiene los escenarios en memoria. Al
+reconstruir/recrear `tracking-server`, se pierden las configuraciones de
+`NORMAL_A`/`DESVIO` y hay que volver a importarlas con
+`scripts/configure-from-central.mjs`. Esto no reinicializa el Central.
+
 #### Gates del nodo Tracking
 
 ```bash
