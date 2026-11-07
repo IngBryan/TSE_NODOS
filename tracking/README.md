@@ -41,13 +41,16 @@ TrackingEvent { id, gpsId, latitude, longitude, datetime /* ISO 8601 en hora de 
 | `PUT`    | `/api/gps-devices/:id`   | Modificacion (completa)                                            |
 | `DELETE` | `/api/gps-devices/:id`   | Baja logica: pasa a `active: false` y devuelve el GPS              |
 | `GET`    | `/api/tracking-on`       | Estado global del tracking: `{ "trackingOn": boolean }` (por defecto `false`) |
-| `PUT`    | `/api/tracking-on`       | Cambia el estado. Body: `{ "trackingOn": true }`                  |
+| `PUT`    | `/api/tracking-on`       | Arranca o detiene la simulacion vial: `{ "trackingOn": true }`  |
+| `POST`   | `/api/tracking-on/flush` | Reintenta mensajes pendientes sin generar nuevas posiciones      |
+| `GET`    | `/api/gps-devices/:id/scenario` | Escenario configurado y progreso                       |
+| `PUT`    | `/api/gps-devices/:id/scenario` | Configura un recorrido vial real para un dispositivo  |
 
 ### Publicacion de eventos (`tracking_on`)
 
 `tracking_on` arranca en `false` y vuelve a `false` al reiniciar. Mientras esta en `true`, cada
-`TRACKING_INTERVAL_SECONDS` (10 por defecto) cada GPS **activo** reporta una posicion simulada
-(paseo aleatorio desde su ultima posicion) y el evento se publica en el exchange `tracking`
+`TRACKING_INTERVAL_SECONDS` (10 por defecto) cada GPS **activo** y configurado reporta una posicion simulada
+(interpolada sobre su recorrido vial) y el evento se publica en el exchange `tracking`
 con routing key `tracking.event` (`src/lib/tracking.ts`, `src/lib/rabbitmq.ts`).
 
 ```json
@@ -83,6 +86,7 @@ La validacion la hace `src/proxy.ts`. Los tokens son JWT HS256 emitidos por el p
 | `RABBITMQ_USER`           | Si*         | Usuario de RabbitMQ                                  |
 | `RABBITMQ_PASSWORD`       | Si*         | Contrasena de RabbitMQ                               |
 | `TRACKING_INTERVAL_SECONDS` | No        | Cada cuanto reporta cada GPS (por defecto `10`)      |
+| `TRACKING_SPEED_KMH` | No | Velocidad simulada (80 km/h por defecto) |
 
 \* Necesarias para encender el tracking: sin ellas `PUT /api/tracking-on` con `true` responde `500`.
 
@@ -121,3 +125,175 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+
+### Tarea 3D — Escenarios viales por GPS
+
+**No se usan puntos inventados ni se modifica el mensaje RabbitMQ.** Un administrador
+configura, para cada GPS activo, las mismas geometrias GeoJSON `LineString`
+que quedaron asociadas a una Guia en PostgreSQL mediante OSRM. El simulador
+recorre cada polilinea por **distancia recorrida** a velocidad simulada constante.
+
+- `NORMAL_A`: primera ruta autorizada.
+- `NORMAL_B`: segunda ruta autorizada; se rechaza cuando OSRM solo proporciono una.
+- `DESVIO`: ruta *vial* calculada con OSRM pasando por un waypoint fuera del corredor.
+  La configuracion se rechaza si el desvio no se aleja al menos 2 km de **todas**
+  las rutas autorizadas en algun punto muestreado. Esa comprobacion es un filtro de
+  escenario, no la regla de fiscalizacion ni una garantia de que haya dos muestras
+  de mas de 2 km dentro de 30 segundos.
+
+**El simulador no decide infracciones** y no envia campos como `scenario` ni
+`desviado` a RabbitMQ. Los eventos publicados mantienen exactamente
+`id`, `gpsId`, `licensePlate`, `latitude`, `longitude` y `datetime`.
+
+#### Importar rutas desde el Central (recomendado)
+
+La API protegida del Central es
+`GET /frontofficefuncionarios-web/api/viajes/{idGuia}/rutas-autorizadas`.
+Para el GPS que tiene la misma matricula que esa Guia, ejecuta desde `tracking/`:
+
+```bash
+# Adquirir un token OAuth del nodo Tracking como indica la seccion anterior.
+export TRACKING_TOKEN='<token de tracking>'
+export CENTRAL_API_KEY='<api key de funcionarios>'
+export CENTRAL_FUNCIONARIO_CI='<cedula de un funcionario autorizado>'
+export GUIA_ID='<id de una Guia con rutas ya generadas>'
+export GPS_ID=2
+export TRACKING_SCENARIO=NORMAL_A
+node scripts/configure-from-central.mjs
+
+# Solo si hay dos alternativas autorizadas:
+export TRACKING_SCENARIO=NORMAL_B
+node scripts/configure-from-central.mjs
+
+# Genera un nuevo camino vial con OSRM que pase por un punto alejado de
+# todas las rutas autorizadas, sin tocar el catalogo PostgreSQL.
+export TRACKING_SCENARIO=DESVIO
+export DESVIO_WAYPOINT='<longitud,latitud de una via alternativa>'
+node scripts/configure-from-central.mjs
+```
+
+Se pueden definir `CENTRAL_BASE_URL` (por defecto
+`http://localhost:8080/frontofficefuncionarios-web/api`), `TRACKING_URL`
+(por defecto `http://localhost:3000`) y `OSRM_BASE_URL` (por defecto
+`https://router.project-osrm.org`). La utilidad se ejecuta **fuera del
+contenedor**, con credenciales de funcionario suministradas al proceso una vez;
+no las almacena en el servidor del nodo ni en su configuracion Docker.
+El servicio publico de OSRM no debe usarse para pruebas intensivas: configurar
+una instancia propia para una carga sostenida.
+
+Alternativamente, se puede invocar el endpoint de configuracion manualmente:
+
+```http
+PUT /api/gps-devices/2/scenario
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "scenario": "NORMAL_A",
+  "authorizedRoutes": [
+    { "type": "LineString", "coordinates": [[-58.0,-33.0], [-58.1,-33.2]] }
+  ]
+}
+```
+
+El JSON anterior es **esquematico** y NO describe una ruta vial verificada.
+En ejecucion deben utilizarse las coordenadas reales devueltas por OSRM y
+persistidas en el Central.
+
+**Operativa y seguridad:**
+
+1. Detener tracking: `PUT /api/tracking-on` con `{"trackingOn":false}`.
+2. Comprobar `GET /api/tracking-on`: `pendingMessages=0` y `flushing=false`.
+   Si hay pendientes, ejecutar `POST /api/tracking-on/flush` con RabbitMQ disponible.
+3. Configurar cada dispositivo **activo** con su propio escenario, ligado a la
+   Guia de la misma matricula. Si un GPS activo carece de configuracion,
+   el arranque responde `409`.
+4. Arrancar tracking con `{"trackingOn":true}`. En la primera publicacion se
+   emite el origen; en las siguientes avanza `TRACKING_SPEED_KMH` por intervalo.
+   Al llegar al destino publica el ultimo punto **una sola vez** y termina
+   para ese dispositivo, sin teletransportarse al origen.
+5. Para cambiar rutas o reiniciar una simulacion, detener y dejar la cola
+   local vacia. La configuracion se rechaza (`409`) si tracking esta encendido
+   o hay publicaciones pendientes/en curso. `messageId` permanece estable ante
+   reintentos y las confirmaciones del broker se conservan.
+6. **La confirmacion RabbitMQ no garantiza procesamiento en el Central.**
+   Antes de comenzar otro ensayo, verificar que el consumidor proceso los
+   mensajes anteriores. No se borra la cola del broker automaticamente.
+
+Los datos y las configuraciones son **en memoria**, igual que la implementacion
+original de `TSE_NODOS`. Al reiniciar el contenedor se pierden configuraciones
+GPS y publicaciones pendientes no confirmadas. Este servicio asume una sola
+instancia (no escalar replicas independientes del simulador).
+
+
+#### Aceleracion temporal opcional para demos (5C)
+
+El `PUT /api/tracking-on` conserva su contrato anterior: `{"trackingOn":true}`
+arranca siempre en **1x** y utiliza `new Date()` en cada reporte, igual que antes.
+No se agrega una variable global en `.env`: ninguna otra demo cambia de velocidad
+por haber ejecutado una prueba acelerada.
+
+Opcionalmente, **al arrancar una ejecucion con tracking detenido y sin pendientes**:
+
+```http
+PUT /api/tracking-on
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"trackingOn":true,"simulationSpeedFactor":20}
+```
+
+Los factores permitidos son **1, 5, 10, 20**. Con un intervalo GPS de 10 s
+(`TRACKING_INTERVAL_SECONDS`) y velocidad vehicular de 80 km/h:
+
+| Factor | Tiempo real entre emisiones | Tiempo GPS entre mediciones | Avance por punto |
+|---|---|---|---|
+| 1x | 10 s | 10 s | ~222 m |
+| 5x | 2 s | 10 s | ~222 m |
+| 10x | 1 s | 10 s | ~222 m |
+| 20x | 0,5 s | 10 s | ~222 m |
+
+La **distancia, geometria y velocidad fisica** no cambian. En ejecuciones
+aceleradas un reloj virtual compartido por los GPS activos mantiene la separacion
+GPS de 10 s aunque las publicaciones se hagan mas rapido. El ultimo timestamp
+planificado se ancla a la hora de arranque, para evitar posiciones futuras.
+`GET /api/tracking-on` incluye `simulationSpeedFactor` y `simulatedStartAt`
+(UTC ISO, nulo en modo normal). El formato de `tracking.event` **no cambia**.
+
+**Precondicion importante de integracion:** la guia en Central debe tener
+`fechaAsignacion` **anterior o igual** a `simulatedStartAt`, y no debe tener
+un fin efectivo anterior a las mediciones. Ejemplo: un viaje de 125 km a 80 km/h
+necesita cerca de 94 minutos de historia de asignacion. Si acabas de asignar
+una guia nueva y arrancas inmediatamente a 20x, la fecha virtual inicial
+puede quedar antes de la asignacion; Fiscalizacion no debe asociar esos eventos.
+Preparar una guia de demo asignada con suficiente antiguedad y comprobar
+`simulatedStartAt` al iniciar. No se alteran ni falsifican reglas del Central.
+Asimismo, evitar ejecutar dos simulaciones con ventanas de timestamps
+superpuestas para la misma matricula: MongoDB mantiene historial por GPS.
+
+Si `TRACKING_INTERVAL_SECONDS / factor` seria menor a 0,2 s, la solicitud
+se rechaza para evitar una tasa de publicacion excesiva. Para volver a 1x,
+detener con `{"trackingOn":false}`, esperar `pendingMessages=0` y
+`flushing=false`, y arrancar con `{"trackingOn":true}`. El factor acelerado
+no persiste entre ejecuciones. No es necesario cambiar el Docker Compose.
+
+**Aviso de despliegue:** Tracking mantiene los escenarios en memoria. Al
+reconstruir/recrear `tracking-server`, se pierden las configuraciones de
+`NORMAL_A`/`DESVIO` y hay que volver a importarlas con
+`scripts/configure-from-central.mjs`. Esto no reinicializa el Central.
+
+#### Gates del nodo Tracking
+
+```bash
+cd tracking
+npm ci
+npm test
+npm run lint
+npx next typegen
+npx tsc --noEmit
+npm run build
+```
+
+Para demostrar el flujo completo falta una prueba integrada con RabbitMQ,
+MongoDB, WildFly y una Guia real cuyas rutas se hayan generado mediante OSRM.
