@@ -10,6 +10,10 @@ const env = process.env;
 const centralUrl = (env.CENTRAL_BASE_URL || 'http://localhost:8080/frontofficefuncionarios-web/api').replace(/\/$/, '');
 const trackingUrl = (env.TRACKING_URL || 'http://localhost:3000').replace(/\/$/, '');
 const scenario = env.TRACKING_SCENARIO || 'NORMAL_A';
+if (!['NORMAL_A', 'DESVIO'].includes(scenario)) {
+  console.error('TRACKING_SCENARIO must be NORMAL_A (route A) or DESVIO');
+  process.exit(2);
+}
 
 async function jsonResponse(url, init = {}) {
   const res = await fetch(url, { ...init, signal: AbortSignal.timeout(15_000) });
@@ -24,8 +28,8 @@ try {
   const rutas = await jsonResponse(url, {
     headers: { 'X-Api-Key': env.CENTRAL_API_KEY, 'X-Usuario-Ci': env.CENTRAL_FUNCIONARIO_CI },
   });
-  if (!Array.isArray(rutas) || rutas.length < 1) {
-    throw new Error('The Central returned no authorized routes for this guide');
+  if (!Array.isArray(rutas) || rutas.length !== 1) {
+    throw new Error('The Central must return exactly one authorized route (A) for this guide');
   }
   rutas.sort((a, b) => a.alternativa - b.alternativa);
   const authorizedRoutes = rutas.map((r) =>

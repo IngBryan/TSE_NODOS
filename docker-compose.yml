@@ -13,7 +13,7 @@ services:
       - OAUTH_CLIENT_SECRET=${TRACKING_OAUTH_CLIENT_SECRET}
       - JWT_SECRET=${TRACKING_JWT_SECRET}
       - OAUTH_TOKEN_TTL_SECONDS=${TRACKING_OAUTH_TOKEN_TTL_SECONDS:-}
-      - TRACKING_INTERVAL_SECONDS=${TRACKING_INTERVAL_SECONDS:-}
+      - TRACKING_INTERVAL_SECONDS=${TRACKING_INTERVAL_SECONDS:-5}
       - TRACKING_SPEED_KMH=${TRACKING_SPEED_KMH:-80}
       - RABBITMQ_HOST=${RABBITMQ_HOST:-host.docker.internal}
       - RABBITMQ_PORT=${RABBITMQ_PORT:-5672}
@@ -53,3 +53,43 @@ services:
       - PDI_SIMULACION_LATENCIA_MS=${PDI_SIMULACION_LATENCIA_MS:-0}
       - PDI_WSS_TIMESTAMP_TTL_SEGUNDOS=${PDI_WSS_TIMESTAMP_TTL_SEGUNDOS:-300}
     restart: unless-stopped
+
+  # Sólo se levanta a pedido; no agrega carga al arranque habitual de los nodos.
+  panel-simulador:
+    profiles: [demo]
+    container_name: panel-simulador
+    # Lee el archivo privado 600 del usuario del host; grupo 0 escribe el volumen.
+    user: "${PANEL_UID:-1000}:0"
+    build:
+      context: ./panel-simulador
+    ports:
+      - "127.0.0.1:3100:3100"
+    env_file:
+      - ./panel-simulador/.env.local
+    environment:
+      PANEL_CONFIG_FILE: /app/config/profiles.json
+      PANEL_STATE_DIR: /app/data
+      LOCAL_TRACKING_URL: http://tracking:3000
+      LOCAL_BALANZAS_URL: http://balanzas:3000
+      LOCAL_CENTRAL_URL: http://host.docker.internal:8081/frontofficefuncionarios-web/api
+      LOCAL_POLLER_MODE: disabled
+      CLOUD_SSH_IDENTITY_FILE: /app/ssh/identity
+      CLOUD_SSH_KNOWN_HOSTS_FILE: /app/ssh/known_hosts
+    volumes:
+      - ./panel-simulador/.local/profiles.json:/app/config/profiles.json:ro
+      - panel-simulador-state:/app/data
+      - type: bind
+        source: ${PANEL_SSH_IDENTITY_FILE:-/home/pis/.ssh/ale_id_ed25519}
+        target: /app/ssh/identity
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${PANEL_SSH_KNOWN_HOSTS_FILE:-/home/pis/.ssh/known_hosts}
+        target: /app/ssh/known_hosts
+        read_only: true
+        bind: {create_host_path: false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+volumes:
+  panel-simulador-state:

@@ -1,0 +1,31 @@
+# Sólo para panel y poller alojados en el namespace del Central.
+# Para un cluster remoto, montar un kubeconfig con permisos equivalentes allí.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: panel-simulador
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: panel-simulador-poller
+rules:
+  - apiGroups: [batch]
+    resources: [cronjobs]
+    resourceNames: [fiscalizacionautomatica-poller]
+    verbs: [get]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: panel-simulador-poller
+subjects:
+  - kind: ServiceAccount
+    name: panel-simulador
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: panel-simulador-poller

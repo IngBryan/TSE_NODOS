@@ -7,7 +7,7 @@ const A = {type: 'LineString', coordinates: [[-58, -33], [-58, -33.2]]};
 const B = {type: 'LineString', coordinates: [[-58, -33], [-58.02, -33.1], [-58, -33.2]]};
 const DETOUR = {type: 'LineString', coordinates: [[-58, -33], [-58.08, -33.1], [-58, -33.2]]};
 
-function config(scenario, authorizedRoutes = [A, B], deviationRoute = DETOUR) {
+function config(scenario, authorizedRoutes = [A], deviationRoute = DETOUR) {
   return {scenario, authorizedRoutes, deviationRoute};
 }
 
@@ -21,9 +21,8 @@ test('distance is metric on the globe and interpolation follows accumulated leng
   assert.deepEqual(positionAtDistance(A, -50), A.coordinates[0]);
 });
 
-test('NORMAL_A and NORMAL_B select different authorized alternatives', () => {
+test('normal circulation always follows the single authorized route A', () => {
   assert.deepEqual(selectedRoute(parseScenarioConfig(config('NORMAL_A'))), A);
-  assert.deepEqual(selectedRoute(parseScenarioConfig(config('NORMAL_B'))), B);
 });
 
 test('DESVIO uses the external detour and is >2km from every authorized route', () => {
@@ -33,8 +32,10 @@ test('DESVIO uses the external detour and is >2km from every authorized route', 
   assert.ok(Math.min(...parsed.authorizedRoutes.map(r => distanceToRouteMeters(middle, r))) > 2_000);
 });
 
-test('reject NORMAL_B when OSRM supplied only one authorized route', () => {
+test('reject removed scenario NORMAL_B and multiple authorized routes', () => {
   assert.throws(() => parseScenarioConfig(config('NORMAL_B', [A])), InvalidScenario);
+  assert.throws(() => parseScenarioConfig(config('NORMAL_A', [A, B])), InvalidScenario);
+  assert.throws(() => parseScenarioConfig(config('DESVIO', [A, B])), InvalidScenario);
 });
 
 test('reject missing detour for DESVIO', () => {

@@ -49,8 +49,14 @@ export function getGpsDevice(id: number): GpsDevice | undefined {
   return db.gpsDevices.get(id);
 }
 
-export function createGpsDevice(input: GpsDeviceInput): GpsDevice {
-  const device: GpsDevice = { id: db.nextGpsId++, ...input };
+export function createGpsDevice(input: GpsDeviceInput, requestedId?: number): GpsDevice {
+  if (requestedId !== undefined && (!Number.isSafeInteger(requestedId) || requestedId < 1 || db.gpsDevices.has(requestedId)))
+    throw new Error("GPS id is invalid or already exists");
+  // Explicit IDs match nodes already registered in Central, without creating thousands of fillers.
+  // They do not change the sequential IDs of ordinary API-created GPS devices.
+  while (db.gpsDevices.has(db.nextGpsId)) db.nextGpsId++;
+  const id = requestedId ?? db.nextGpsId++;
+  const device: GpsDevice = { id, ...input };
   db.gpsDevices.set(device.id, device);
   return device;
 }

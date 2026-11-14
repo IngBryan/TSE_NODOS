@@ -82,3 +82,21 @@ curl "localhost:3001/api/scales/1/weighings?licensePlate=SBC1234&from=2026-09-29
 ```
 
 Errores del token endpoint segun RFC 6749: `{ "error": "invalid_client" | "invalid_request" | "unsupported_grant_type", "error_description": string }`.
+
+### Indisponibilidad controlada para demostraciones
+
+`GET /api/simulation/availability` consulta el estado y `PUT` recibe
+`{ "outageId": "identificador-de-ejecucion", "durationSeconds": 180 }` para activar una caída
+de hasta 180 segundos. Ambos requieren el mismo OAuth que la API de Balanzas. `durationSeconds: 0`
+recupera la caída del mismo identificador; otra ejecución no puede levantarla ni reemplazarla.
+Repetir una activación con el mismo identificador no prolonga el vencimiento.
+
+Durante la caída, todos los métodos de `/api/scales` y sus subrutas responden **503** con
+`Retry-After` y sin caché. No se borran ni se generan pesajes. OAuth, el control y `/api/health`
+continúan operativos: se simula indisponibilidad del servicio de datos, no una caída del proceso.
+El estado contabiliza las peticiones rechazadas y las consultas GET de pesajes rechazadas, para
+comprobar que el poller realmente intentó consultarlas. Al vencer el plazo se recupera automáticamente.
+
+El panel registra un pesaje, provoca esta caída, ejecuta un poll fallido y otro tras recuperarlo,
+y verifica el recibo original en Central sin reenviarlo. El estado de caída es en memoria, igual
+que los pesajes: usar una sola réplica/proceso del simulador.

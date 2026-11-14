@@ -7,6 +7,7 @@ Nodos perifericos del laboratorio. Son componentes standalone (Next.js y Spring 
 TSE_NODOS/
 ├── tracking/            # Mock de GPS: publica posiciones en el RabbitMQ del componente central
 ├── balanzas/            # Mock de balanzas: API consumida por el componente central (OAuth2)
+├── panel-simulador/     # Panel Next.js: coordina escenarios GPS/carga y verifica evidencia
 ├── pdi-service/         # PDI simulada (Servicio de Informacion DNIC, SOAP, Spring Boot)
 ├── docker-compose.yml   # Levanta tracking, balanzas y pdi
 └── .env                 # Credenciales (ignorado por git)
@@ -44,7 +45,7 @@ TRACKING_OAUTH_CLIENT_ID=tracking-admin
 TRACKING_OAUTH_CLIENT_SECRET=<otro-secreto>
 TRACKING_JWT_SECRET=<otro-minimo-32-caracteres>
 TRACKING_OAUTH_TOKEN_TTL_SECONDS=3600
-#TRACKING_INTERVAL_SECONDS=10   # opcional: cada cuanto reporta cada GPS
+#TRACKING_INTERVAL_SECONDS=5   # opcional: cada cuanto reporta cada GPS
 #TRACKING_SPEED_KMH=80         # opcional: velocidad simulada sobre geometria real
 
 #RabbitMQ del componente central (credenciales con las que tracking publica)
@@ -82,3 +83,16 @@ a otra maquina, definir `RABBITMQ_HOST` en el `.env`.
 
 - Node.js 24 / npm (para desarrollo local)
 - Docker + Docker Compose
+
+## Panel operativo de demostración
+
+Aplicación independiente en [`panel-simulador/`](panel-simulador/README.md), junto a Tracking,
+Balanzas y PDI. Permite ejecutar los cuatro escenarios, comprobar el ambiente, inspeccionar evidencia
+nueva y detener/restaurar GPS. Puede correr con Node en la PC o como contenedor en cloud.
+Las credenciales sólo se usan en el servidor. El panel no crea casos directamente en Central.
+
+El servicio Compose está en el perfil `demo`: `docker compose --profile demo up --build -d panel-simulador`.
+Preparar antes su configuración privada como indica el README. El poller cloud se ejecuta a demanda
+por SSH al nodo del Central; la privada y `known_hosts` se leen en el servidor del panel.
+Tracking mide cada **5 segundos** por defecto; un despliegue con una variable explícita distinta
+necesita actualizarla y recrear su contenedor.

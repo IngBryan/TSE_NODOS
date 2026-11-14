@@ -23,8 +23,20 @@ export async function PUT(request: Request) {
   if (!body.trackingOn && body.simulationSpeedFactor !== undefined) {
     return errorResponse(400, "simulationSpeedFactor is only accepted when starting tracking");
   }
+  if (body.resume !== undefined && typeof body.resume !== "boolean")
+    return errorResponse(400, "resume must be a boolean");
+  if (body.stopAtMeters !== undefined && (typeof body.stopAtMeters !== "number" || !Number.isFinite(body.stopAtMeters)))
+    return errorResponse(400, "stopAtMeters must be a finite number");
+  if (body.configurationId !== undefined && (typeof body.configurationId !== "string" || !body.configurationId))
+    return errorResponse(400, "configurationId must be a nonempty string");
+  if (!body.trackingOn && [body.resume, body.stopAtMeters, body.configurationId].some(v => v !== undefined))
+    return errorResponse(400, "resume, stopAtMeters and configurationId are only accepted when starting");
   try {
-    setTracking(body.trackingOn, body.simulationSpeedFactor);
+    if (body.trackingOn && (body.resume || body.stopAtMeters !== undefined) && !body.configurationId)
+      return errorResponse(400, "configurationId is required for preparation and resume");
+    setTracking(body.trackingOn, body.simulationSpeedFactor, {
+      resume: body.resume, stopAtMeters: body.stopAtMeters, configurationId: body.configurationId,
+    });
     return NextResponse.json(getTrackingStatus());
   } catch (error) {
     if (error instanceof TrackingScenarioConflict) return errorResponse(409, error.message);

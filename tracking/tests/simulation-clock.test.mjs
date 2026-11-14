@@ -57,3 +57,15 @@ test('independent runs obtain independent clocks without global mutable state', 
   assert.equal(secondA.getTime(), secondB.getTime());
   assert.equal(a.nextMeasurement().getTime() - secondB.getTime(), 10_000);
 });
+
+test('5-second GPS measurements remain 5 seconds apart at 20x and advance about 111 m', () => {
+  assert.equal(wallIntervalMs(5, 1), 5_000);
+  assert.equal(wallIntervalMs(5, 20), 250);
+  const now = Date.parse('2026-11-14T12:00:00Z');
+  const clock = createAcceleratedClock(now, 1_000, 5, 80);
+  const first = clock.nextMeasurement();
+  const second = clock.nextMeasurement();
+  assert.equal(second.getTime() - first.getTime(), 5_000);
+  assert.ok(Math.abs(80 * 5 / 3.6 - 111.111111) < 0.001);
+  assert.ok(second.getTime() <= now);
+});

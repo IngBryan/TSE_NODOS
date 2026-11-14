@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rejectDuringOutage } from "@/lib/availability";
 import { deactivateScale, getScale, updateScale } from "@/lib/store";
 import { errorResponse, parseId, readJson, validateScale } from "@/lib/validation";
 
@@ -6,6 +7,8 @@ type Context = { params: Promise<{ id: string }> };
 
 // GET /api/scales/:id
 export async function GET(_request: Request, { params }: Context) {
+  const fault = rejectDuringOutage();
+  if (fault) return fault;
   const id = parseId((await params).id);
   const scale = id && getScale(id);
   if (!scale) return errorResponse(404, "Scale not found");
@@ -14,6 +17,8 @@ export async function GET(_request: Request, { params }: Context) {
 
 // PUT /api/scales/:id  (full replace)
 export async function PUT(request: Request, { params }: Context) {
+  const fault = rejectDuringOutage();
+  if (fault) return fault;
   const id = parseId((await params).id);
   if (!id || !getScale(id)) return errorResponse(404, "Scale not found");
 
@@ -28,6 +33,8 @@ export async function PUT(request: Request, { params }: Context) {
 
 // DELETE /api/scales/:id  (logical delete: sets active = false)
 export async function DELETE(_request: Request, { params }: Context) {
+  const fault = rejectDuringOutage();
+  if (fault) return fault;
   const id = parseId((await params).id);
   const scale = id && deactivateScale(id);
   if (!scale) return errorResponse(404, "Scale not found");

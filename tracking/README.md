@@ -49,7 +49,7 @@ TrackingEvent { id, gpsId, latitude, longitude, datetime /* ISO 8601 en hora de 
 ### Publicacion de eventos (`tracking_on`)
 
 `tracking_on` arranca en `false` y vuelve a `false` al reiniciar. Mientras esta en `true`, cada
-`TRACKING_INTERVAL_SECONDS` (10 por defecto) cada GPS **activo** y configurado reporta una posicion simulada
+`TRACKING_INTERVAL_SECONDS` (5 por defecto) cada GPS **activo** y configurado reporta una posicion simulada
 (interpolada sobre su recorrido vial) y el evento se publica en el exchange `tracking`
 con routing key `tracking.event` (`src/lib/tracking.ts`, `src/lib/rabbitmq.ts`).
 
@@ -85,7 +85,7 @@ La validacion la hace `src/proxy.ts`. Los tokens son JWT HS256 emitidos por el p
 | `RABBITMQ_PORT`           | No          | Puerto AMQP (por defecto `5672`)                     |
 | `RABBITMQ_USER`           | Si*         | Usuario de RabbitMQ                                  |
 | `RABBITMQ_PASSWORD`       | Si*         | Contrasena de RabbitMQ                               |
-| `TRACKING_INTERVAL_SECONDS` | No        | Cada cuanto reporta cada GPS (por defecto `10`)      |
+| `TRACKING_INTERVAL_SECONDS` | No        | Cada cuanto reporta cada GPS (por defecto `5`)      |
 | `TRACKING_SPEED_KMH` | No | Velocidad simulada (80 km/h por defecto) |
 
 \* Necesarias para encender el tracking: sin ellas `PUT /api/tracking-on` con `true` responde `500`.
@@ -134,11 +134,10 @@ configura, para cada GPS activo, las mismas geometrias GeoJSON `LineString`
 que quedaron asociadas a una Guia en PostgreSQL mediante OSRM. El simulador
 recorre cada polilinea por **distancia recorrida** a velocidad simulada constante.
 
-- `NORMAL_A`: primera ruta autorizada.
-- `NORMAL_B`: segunda ruta autorizada; se rechaza cuando OSRM solo proporciono una.
+- `NORMAL_A`: siempre la única ruta autorizada (A). No hay selección de ruta B.
 - `DESVIO`: ruta *vial* calculada con OSRM pasando por un waypoint fuera del corredor.
-  La configuracion se rechaza si el desvio no se aleja al menos 2 km de **todas**
-  las rutas autorizadas en algun punto muestreado. Esa comprobacion es un filtro de
+  La configuracion se rechaza si el desvio no se aleja al menos 2 km de la única
+  ruta autorizada en algun punto muestreado. Esa comprobacion es un filtro de
   escenario, no la regla de fiscalizacion ni una garantia de que haya dos muestras
   de mas de 2 km dentro de 30 segundos.
 
@@ -162,12 +161,8 @@ export GPS_ID=2
 export TRACKING_SCENARIO=NORMAL_A
 node scripts/configure-from-central.mjs
 
-# Solo si hay dos alternativas autorizadas:
-export TRACKING_SCENARIO=NORMAL_B
-node scripts/configure-from-central.mjs
-
 # Genera un nuevo camino vial con OSRM que pase por un punto alejado de
-# todas las rutas autorizadas, sin tocar el catalogo PostgreSQL.
+# la ruta A, sin tocar el catalogo PostgreSQL.
 export TRACKING_SCENARIO=DESVIO
 export DESVIO_WAYPOINT='<longitud,latitud de una via alternativa>'
 node scripts/configure-from-central.mjs
@@ -196,6 +191,10 @@ Content-Type: application/json
   ]
 }
 ```
+
+`authorizedRoutes` conserva el formato de lista para compatibilidad, pero exige exactamente
+una geometría. `NORMAL_B` y listas con varias rutas se rechazan con 400. El recorrido de
+desvío sólo se usa para ensayar posiciones fuera de A; no es otra ruta admitida.
 
 El JSON anterior es **esquematico** y NO describe una ruta vial verificada.
 En ejecucion deben utilizarse las coordenadas reales devueltas por OSRM y
@@ -297,3 +296,42 @@ npm run build
 
 Para demostrar el flujo completo falta una prueba integrada con RabbitMQ,
 MongoDB, WildFly y una Guia real cuyas rutas se hayan generado mediante OSRM.
+
+### Preparación parcial y continuación desde el corte
+
+El panel configura DESVIO con la ruta A y el recorrido vial alternativo. La respuesta de escenario
+incluye `configurationId` y `preparation` (o `null` si no hay un tramo inicial común suficiente).
+El plan muestrea a la misma cadencia/distancia que el GPS, permite como máximo 0,5 m de separación
+de A y deja dos muestras dentro de A antes de la primera muestra que se aparta.
+
+`PUT /api/tracking-on` admite estos campos adicionales al arrancar:
+
+- `stopAtMeters`: corte automático; debe coincidir con el plan validado. Requiere un solo GPS activo.
+- `configurationId`: identifica exactamente el recorrido; obligatorio para preparar o continuar.
+- `resume: true`: continúa desde `lastReportedMeters`, únicamente a factor 1 y sin corte histórico.
+
+La preparación del panel usa factor 20 y calcula el reloj histórico con la longitud del tramo previo,
+no la longitud de todo el viaje. Su última medición no supera la hora de inicio de preparación.
+En el corte, `trackingOn=false`, `pausedAtBoundary=true`; el estado incluye cantidad de puntos,
+UUID y fecha del último punto. Esperar que `pendingMessages=0` y `flushing=false` antes de continuar.
+La continuación vuelve a publicar el mismo lugar con hora actual y sigue cada 5 segundos, sin salto
+al origen. Arrancar sin `resume` conserva la semántica de empezar desde cero.
+
+Posición y configuración son en memoria: reiniciar Tracking invalida la preparación del panel.
+Los pendientes conservan el UUID entre reintentos y bloquean reconfiguraciones/reinicios de recorrido.
+El nodo sólo genera posiciones; Central sigue siendo quien asocia la guía y detecta el desvío.
+
+Para un GPS ya registrado en Central pero aún ausente en el simulador, `POST /api/gps-devices`
+admite `id` explícito (entero positivo, 409 si ya existe). Omitirlo mantiene el alta secuencial habitual.
+El panel usa esta opción para el GPS dedicado 100001 / LT00001, sin reasignar los GPS de otros ensayos.
+
+### Control por GPS en tiempo real
+
+`PUT /api/gps-devices/:id/simulation` permite `{ "running": true, "configurationId": "…" }`
+y opcional `resume: true`, o `{ "running": false }` para detener únicamente ese GPS.
+Siempre usa el reloj actual y la cadencia normal de 5 segundos. Rechaza factores y cortes acelerados.
+La preparación a 20x sigue siendo exclusiva mediante `/api/tracking-on`; una vez pausada, otros
+GPS pueden arrancar y el preparado puede reanudarse en el mismo reloj real sin reiniciar a los demás.
+Cada escenario expone `running`, `pausedAtBoundary`, `pendingMessages`, `emittedPoints` y
+`confirmedPoints`. El temporizador global se detiene sólo cuando no queda ningún GPS ejecutándose.
+`PUT /api/tracking-on` con `false` conserva su función de parada global.

@@ -3,10 +3,10 @@ import {
   type LineString,
 } from "./route-math.ts";
 
-export type TrackingScenario = "NORMAL_A" | "NORMAL_B" | "DESVIO";
+export type TrackingScenario = "NORMAL_A" | "DESVIO";
 export interface DeviceScenarioConfig {
   scenario: TrackingScenario;
-  /** The exact, immutable authorized lines from the Central, in alternative order. */
+  /** Exactly one immutable authorized line (A). Array shape preserves the API contract. */
   authorizedRoutes: LineString[];
   /** Optional OSRM driving route through a detour waypoint, never an authorized line. */
   deviationRoute?: LineString;
@@ -48,16 +48,12 @@ export function parseScenarioConfig(value: unknown): DeviceScenarioConfig {
   }
   const data = value as Record<string, unknown>;
   if (!isTrackingScenario(data.scenario)) {
-    throw new InvalidScenario("scenario must be NORMAL_A, NORMAL_B or DESVIO");
+    throw new InvalidScenario("scenario must be NORMAL_A or DESVIO");
   }
-  if (!Array.isArray(data.authorizedRoutes) || data.authorizedRoutes.length < 1
-      || data.authorizedRoutes.length > 3) {
-    throw new InvalidScenario("authorizedRoutes must contain 1..3 authorized GeoJSON lines");
+  if (!Array.isArray(data.authorizedRoutes) || data.authorizedRoutes.length !== 1) {
+    throw new InvalidScenario("authorizedRoutes must contain exactly one authorized GeoJSON line (A)");
   }
   const authorizedRoutes = data.authorizedRoutes.map((v, i) => parseLineString(v, `authorizedRoutes[${i}]`));
-  if (data.scenario === "NORMAL_B" && authorizedRoutes.length < 2) {
-    throw new InvalidScenario("NORMAL_B requires a second authorized alternative");
-  }
   const deviationRoute = data.deviationRoute === undefined
     ? undefined : parseLineString(data.deviationRoute, "deviationRoute");
   if (data.scenario === "DESVIO" && !deviationRoute) {
@@ -89,11 +85,10 @@ export function parseScenarioConfig(value: unknown): DeviceScenarioConfig {
 }
 
 export function isTrackingScenario(value: unknown): value is TrackingScenario {
-  return value === "NORMAL_A" || value === "NORMAL_B" || value === "DESVIO";
+  return value === "NORMAL_A" || value === "DESVIO";
 }
 
 export function selectedRoute(config: DeviceScenarioConfig): LineString {
-  if (config.scenario === "NORMAL_B") return config.authorizedRoutes[1];
   if (config.scenario === "DESVIO") return config.deviationRoute!;
   return config.authorizedRoutes[0];
 }

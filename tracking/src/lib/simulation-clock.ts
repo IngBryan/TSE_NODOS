@@ -47,7 +47,7 @@ export function createAcceleratedClock(
     throw new Error("Invalid simulation clock parameters");
   }
   // First position is the origin; final position is emitted after ceil(L/step) intervals.
-  const steps = Math.ceil(maxRouteMeters / stepMeters);
+  const steps = Math.ceil(maxRouteMeters / stepMeters - 1e-9);
   const startMs = nowMs - steps * gpsIntervalSeconds * 1_000;
   if (!Number.isFinite(startMs) || !Number.isFinite(new Date(startMs).getTime())) {
     throw new Error("Simulated itinerary is too long for a valid timestamp");

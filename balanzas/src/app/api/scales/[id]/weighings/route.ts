@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rejectDuringOutage } from "@/lib/availability";
 import { createWeighing, getScale, listWeighings } from "@/lib/store";
 import { errorResponse, parseId, readJson } from "@/lib/validation";
 
@@ -7,6 +8,8 @@ type Context = { params: Promise<{ id: string }> };
 // GET /api/scales/:id/weighings?from=<ISO>&to=<ISO>&licensePlate=SBC1234
 // Weighings of a scale in a date range (inclusive), optionally for a single vehicle.
 export async function GET(request: Request, { params }: Context) {
+  const fault = rejectDuringOutage(true);
+  if (fault) return fault;
   const id = parseId((await params).id);
   if (!id || !getScale(id)) return errorResponse(404, "Scale not found");
 
@@ -47,6 +50,8 @@ export async function GET(request: Request, { params }: Context) {
 // The standard GET contract and the Central poller remain unchanged.
 // Body: { "licensePlate": "STU5678", "weight": 39000 }
 export async function POST(request: Request, { params }: Context) {
+  const fault = rejectDuringOutage();
+  if (fault) return fault;
   const id = parseId((await params).id);
   const scale = id && getScale(id);
   if (!scale) return errorResponse(404, "Scale not found");
