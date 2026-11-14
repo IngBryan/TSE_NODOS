@@ -15,6 +15,15 @@ if (!['NORMAL_A', 'DESVIO'].includes(scenario)) {
   process.exit(2);
 }
 
+/** Neutralizes CR/LF and other control characters so external data cannot forge log lines. */
+function sanitizeForLog(value) {
+  return Array.from(String(value), (ch) => {
+    const code = ch.codePointAt(0);
+    const isControl = code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029;
+    return isControl ? " " : ch;
+  }).join("");
+}
+
 async function jsonResponse(url, init = {}) {
   const res = await fetch(url, { ...init, signal: AbortSignal.timeout(15_000) });
   const content = await res.text();
@@ -62,9 +71,10 @@ try {
       'Content-Type': 'application/json',
     }, body: JSON.stringify(config) },
   );
-  console.log('Scenario configured for GPS', env.GPS_ID, 'Guide', env.GUIA_ID, ':',
-    JSON.stringify(configured.configuration));
+  console.log(sanitizeForLog(`Scenario configured for GPS ${env.GPS_ID} Guide ${env.GUIA_ID}: `
+    + JSON.stringify(configured.configuration)));
 } catch (error) {
-  console.error('Cannot configure tracking scenario:', error instanceof Error ? error.message : error);
+  const reason = error instanceof Error ? error.message : error;
+  console.error(sanitizeForLog(`Cannot configure tracking scenario: ${reason}`));
   process.exitCode = 1;
 }
