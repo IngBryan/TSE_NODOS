@@ -23,8 +23,17 @@ desktop.ini
 # Logs sueltos en la raiz
 *.log
 
-# Por si alguien corre npm/mvn desde la raiz por error
-/node_modules/
+# Dependencias y compilados Next.js en cualquier componente, incluso si
+# su .gitignore no existe en la rama actual.
+node_modules/
+.next/
+*.tsbuildinfo
+next-env.d.ts
+
+# Estado local del panel simulador
+/panel-simulador/.local/
+
+# Por si alguien corre Maven desde la raiz por error
 /target/
 
 # Variables de entorno / secretos (en cualquier carpeta del repo)
