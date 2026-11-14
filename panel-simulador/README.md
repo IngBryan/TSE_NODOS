@@ -121,8 +121,9 @@ circulación normal y envía mediciones con hora real cada 5 segundos. No cambia
 ni registra un INICIO de la app móvil: una guía semilla ASIGNADA sigue mostrándose como ASIGNADA.
 
 Si la guía tiene una ruta autorizada archivada, usa exactamente esa ruta. Las seeds actuales de
-GV-LT00001 no tienen una ruta archivada: en ese caso usa el tramo vial corto definido por
-`liveOrigin` y `liveDestination`, por defecto dentro de Montevideo. No se presenta ese tramo como
+GV-LT00001 no tienen una ruta archivada: en ese caso usa el recorrido vial definido por
+`liveOrigin` y `liveDestination`, por defecto Montevideo–Maldonado por la Interbalnearia,
+de unos 132 km (aproximadamente 1 h 40 min a 80 km/h). No se presenta ese tramo como
 una ruta autorizada guardada en Central ni como el recorrido completo de la guía.
 
 El panel consulta el historial GPS de esa guía por la API de Central y deduplica los UUID para
@@ -152,9 +153,19 @@ en Tracking y estar registrado como nodo activo en Central; el GPS 100001 de las
 
 ### Datos del ensayo
 
+El vehículo sin guía usa también Montevideo–Maldonado por defecto, mediante `origin` y
+`destination`. Ambos GPS continúan reportando cada 5 segundos después de detectar los casos,
+hasta que se los detenga o lleguen al final del recorrido. No hay un límite de 53 puntos.
+Si un perfil importado conserva el destino corto anterior `[-56.18,-34.88]`, actualizar
+`destination` y, si está definido, `liveDestination` a `[-54.95,-34.9]` para usar el recorrido largo.
+
 Por defecto se usan SBC1234/GPS 1 (sin guía y documentación vencida), STU5678/GPS 2,
-GV-FISC001, balanza 4 y 50.000 kg. El waypoint `[-57.82,-33.32]` corresponde a la ruta de demo
-Mercedes/Nueva Palmira. Para otro dataset ajustar `waypoint`, `guideId`, matrículas y GPS en el perfil.
+GV-FISC001, balanza 4 y 50.000 kg. El waypoint `[-57.817183,-33.5096]` está sobre el
+empalme de las rutas 2 y 105, junto al acceso a Palmitas. El desvío sale de Mercedes por
+la ruta 2, pasa por ese empalme y continúa por la 105 hacia Dolores y la 21 hacia Nueva
+Palmira: unos 121 km. El punto se comprobó sin desplazamiento en OSRM y el recorrido
+cumple el tramo inicial compartido y la separación requerida para confirmar el desvío.
+Para otro dataset ajustar `waypoint`, `guideId`, matrículas y GPS en el perfil.
 La solicitud de recorrido envía las coordenadas a `osrmUrl`, por defecto el servicio público de OSRM.
 Puede configurarse un OSRM propio. El GPS sigue una geometría vial; el panel no fabrica posiciones.
 
