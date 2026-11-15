@@ -2,7 +2,7 @@
 
 Aplicación Next.js independiente, al mismo nivel que Tracking, Balanzas y PDI. Controla los nodos
 por sus APIs y verifica evidencia nueva en Central. No publica GPS directamente en RabbitMQ,
-no inserta expedientes y no modifica las reglas del Central. Postman queda como herramienta auxiliar.
+no inserta expedientes y no modifica las reglas del Central.
 
 ## Inicio en Ubuntu y Windows
 
@@ -11,20 +11,48 @@ El mismo panel se ejecuta directamente con Node.js 24 en Ubuntu o Windows. Para 
 con contenedores Linux. Para **Elastic Cloud**, se necesita el cliente OpenSSH en el PATH del
 proceso del panel; `kubectl` se ejecuta en el servidor remoto, no se instala en Windows.
 
-Desde `TSE_NODOS/panel-simulador`, importar las credenciales de Postman:
+Desde `TSE_NODOS/panel-simulador`, instalar dependencias. Si todavía no tenés
+`.env.local` y `.local/profiles.json` configurados, crearlos desde los ejemplos.
+En Ubuntu:
 
 ```bash
 npm ci
-npm run import:postman -- --local /ruta/Local/Entorno.postman_environment.json --cloud /ruta/Cloud/Entorno.postman_environment.json
-npm run dev
+cp .env.example .env.local
+mkdir -p .local
+cp profiles.example.json .local/profiles.json
+chmod 700 .local
+chmod 600 .env.local .local/profiles.json
 ```
 
-En PowerShell, poner entre comillas las rutas de los entornos:
+En PowerShell:
 
 ```powershell
 cd "C:\ruta\TSE_NODOS\panel-simulador"
 npm ci
-npm run import:postman -- --local "C:\ruta\Local\Entorno.postman_environment.json" --cloud "C:\ruta\Cloud\Entorno.postman_environment.json"
+Copy-Item .env.example .env.local
+New-Item -ItemType Directory -Force .local
+Copy-Item profiles.example.json .local/profiles.json
+```
+
+Completar en `.local/profiles.json` las credenciales del ambiente que se vaya a usar
+(`local` o `elasticcloud`): `apiKey` del API de funcionarios de Central,
+`funcionarioCi` de un funcionario autorizado y los pares `trackingClientId` /
+`trackingClientSecret` y `balanzasClientId` / `balanzasClientSecret` de los nodos.
+El ejemplo incluye todos los campos configurables de ambos ambientes, con los
+valores predeterminados de `src/lib/config.ts` y los secretos vacíos. Revisar las
+URLs, identificadores de guía/GPS, recorridos y rutas según el despliegue real.
+`composeFile` se usa en modo Docker; los campos `ssh*`, en modo SSH.
+Se puede omitir cualquier campo para usar su valor predeterminado del código.
+La prioridad es: variables de `.env.local` (prefijos `LOCAL_` / `CLOUD_`), luego
+`.local/profiles.json`, y finalmente los valores predeterminados del código.
+Para Elastic Cloud, configurar también las rutas de la clave SSH autorizada y
+de `known_hosts` como se detalla en la sección del ejecutor.
+
+Si recibiste los dos archivos ya configurados, conservarlos y omitir las copias.
+La carpeta `.local/state` se crea automáticamente al guardar una ejecución.
+Con la configuración lista, arrancar el panel:
+
+```bash
 npm run dev
 ```
 
@@ -50,11 +78,9 @@ npm start
 
 Abrir http://localhost:3100; el panel local se abre directamente, sin contraseña ni inicio de sesión.
 La configuración del panel está en `.env.local` y las claves de TSE y OAuth quedan en
-`.local/profiles.json`; ambos archivos están ignorados por Git. En Ubuntu se crean con
+`.local/profiles.json`; ambos archivos están ignorados por Git. En Ubuntu usar
 permisos 600; en Windows, los permisos efectivos son las ACL de la cuenta que ejecuta el panel.
 Guardar los archivos privados en una carpeta accesible sólo a esa cuenta.
-La importación no modifica los entornos originales de Postman. Para repetir una importación,
-se actualizan las propiedades importadas del perfil elegido; volver a revisar sus ajustes del poller.
 
 Para apuntar a Elastic Cloud no es necesario levantar ningún contenedor local del Central o de nodos.
 Sólo debe estar funcionando el panel y ser accesibles los servicios remotos.
@@ -195,7 +221,7 @@ en Tracking y estar registrado como nodo activo en Central; el GPS 100001 de las
 El vehículo sin guía usa también Montevideo–Maldonado por defecto, mediante `origin` y
 `destination`. Ambos GPS continúan reportando cada 5 segundos después de detectar los casos,
 hasta que se los detenga o lleguen al final del recorrido. No hay un límite de 53 puntos.
-Si un perfil importado conserva el destino corto anterior `[-56.18,-34.88]`, actualizar
+Si un perfil conserva el destino corto anterior `[-56.18,-34.88]`, actualizar
 `destination` y, si está definido, `liveDestination` a `[-54.95,-34.9]` para usar el recorrido largo.
 
 Por defecto se usan SBC1234/GPS 1 (sin guía y documentación vencida), STU5678/GPS 2,

@@ -145,35 +145,16 @@ recorre cada polilinea por **distancia recorrida** a velocidad simulada constant
 `desviado` a RabbitMQ. Los eventos publicados mantienen exactamente
 `id`, `gpsId`, `licensePlate`, `latitude`, `longitude` y `datetime`.
 
-#### Importar rutas desde el Central (recomendado)
+#### Configurar recorridos
 
-La API protegida del Central es
+El [panel simulador](../panel-simulador/README.md) configura los recorridos de sus
+ensayos mediante la API del nodo. Para seguimiento y desvio consulta las rutas
+de la Guia en la API protegida del Central:
 `GET /frontofficefuncionarios-web/api/viajes/{idGuia}/rutas-autorizadas`.
-Para el GPS que tiene la misma matricula que esa Guia, ejecuta desde `tracking/`:
+El GPS debe corresponder a la matricula de esa Guia. En el escenario de desvio,
+el panel calcula con OSRM un recorrido vial alternativo sin modificar la ruta
+autorizada guardada en Central.
 
-```bash
-# Adquirir un token OAuth del nodo Tracking como indica la seccion anterior.
-export TRACKING_TOKEN='<token de tracking>'
-export CENTRAL_API_KEY='<api key de funcionarios>'
-export CENTRAL_FUNCIONARIO_CI='<cedula de un funcionario autorizado>'
-export GUIA_ID='<id de una Guia con rutas ya generadas>'
-export GPS_ID=2
-export TRACKING_SCENARIO=NORMAL_A
-node scripts/configure-from-central.mjs
-
-# Genera un nuevo camino vial con OSRM que pase por un punto alejado de
-# la ruta A, sin tocar el catalogo PostgreSQL.
-export TRACKING_SCENARIO=DESVIO
-export DESVIO_WAYPOINT='<longitud,latitud de una via alternativa>'
-node scripts/configure-from-central.mjs
-```
-
-Se pueden definir `CENTRAL_BASE_URL` (por defecto
-`http://localhost:8080/frontofficefuncionarios-web/api`), `TRACKING_URL`
-(por defecto `http://localhost:3000`) y `OSRM_BASE_URL` (por defecto
-`https://router.project-osrm.org`). La utilidad se ejecuta **fuera del
-contenedor**, con credenciales de funcionario suministradas al proceso una vez;
-no las almacena en el servidor del nodo ni en su configuracion Docker.
 El servicio publico de OSRM no debe usarse para pruebas intensivas: configurar
 una instancia propia para una carga sostenida.
 
@@ -279,8 +260,8 @@ no persiste entre ejecuciones. No es necesario cambiar el Docker Compose.
 
 **Aviso de despliegue:** Tracking mantiene los escenarios en memoria. Al
 reconstruir/recrear `tracking-server`, se pierden las configuraciones de
-`NORMAL_A`/`DESVIO` y hay que volver a importarlas con
-`scripts/configure-from-central.mjs`. Esto no reinicializa el Central.
+`NORMAL_A`/`DESVIO` y hay que volver a configurarlas desde el panel simulador
+o mediante la API de escenarios. Esto no reinicializa el Central.
 
 #### Gates del nodo Tracking
 

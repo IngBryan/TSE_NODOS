@@ -79,21 +79,6 @@ test("npm start respeta profiles.json y mantiene rutas después del cambio de cw
   }
 });
 
-test("importar Postman prepara el panel sin contraseña y conserva las credenciales privadas", () => {
-  const cwd = path.join(root, "importacion privada");
-  fs.mkdirSync(cwd);
-  const input = path.join(cwd, "Local.postman_environment.json");
-  const secret = "credencial-privada-de-prueba";
-  fs.writeFileSync(input, JSON.stringify({values: [{key: "funcionarios_api_key", value: secret}]}));
-  const script = fileURLToPath(new URL("../scripts/import-postman.mjs", import.meta.url));
-  const result = spawnSync(process.execPath, [script, "--local", input], {cwd, encoding: "utf8"});
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(fs.readFileSync(path.join(cwd, ".env.local"), "utf8"),
-    "PANEL_CONFIG_FILE=.local/profiles.json\nPANEL_STATE_DIR=.local/state\n");
-  assert.equal(JSON.parse(fs.readFileSync(path.join(cwd, ".local", "profiles.json"), "utf8")).local.apiKey, secret);
-  assert.equal(result.stdout.includes(secret), false);
-});
-
 test("ejecutor conserva argumentos y stdin sin interpretación del shell", async () => {
   const args = ["ruta con espacios", "a&b", "$(literal)", "comilla'\"", path.join(root, "private key")];
   const source = "let input='';process.stdin.on('data',b=>input+=b);process.stdin.on('end',()=>console.log(JSON.stringify({args:process.argv.slice(1),input})));";
