@@ -88,11 +88,14 @@ a otra maquina, definir `RABBITMQ_HOST` en el `.env`.
 
 Aplicación independiente en [`panel-simulador/`](panel-simulador/README.md), junto a Tracking,
 Balanzas y PDI. Permite ejecutar los cuatro escenarios, comprobar el ambiente, inspeccionar evidencia
-nueva y detener/restaurar GPS. Puede correr con Node en la PC o como contenedor en cloud.
+nueva y detener/restaurar GPS. Se ejecuta con Node.js 24 en la PC, tanto en Ubuntu como en Windows.
 Las credenciales sólo se usan en el servidor. El panel no crea casos directamente en Central.
 
-El servicio Compose está en el perfil `demo`: `docker compose --profile demo up --build -d panel-simulador`.
-Preparar antes su configuración privada como indica el README. El poller cloud se ejecuta a demanda
-por SSH al nodo del Central; la privada y `known_hosts` se leen en el servidor del panel.
+Preparar su configuración privada como indica el README y ejecutar `npm run dev` desde
+`panel-simulador/`, o `npm run build` y `npm start` para usar la compilación de producción.
+En el ambiente **Local**, Docker Compose levanta los nodos y Central; el panel lanza el poller local
+mediante Docker. En **Elastic Cloud**, el panel consulta las APIs remotas y ejecuta el poller a demanda
+por SSH al nodo del Central; la privada y `known_hosts` se leen en la PC. Central y los nodos son los
+componentes desplegados en cloud.
 Tracking mide cada **5 segundos** por defecto; un despliegue con una variable explícita distinta
 necesita actualizarla y recrear su contenedor.

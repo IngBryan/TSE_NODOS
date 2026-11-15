@@ -65,17 +65,24 @@ export async function concurrentDemo(run: Run, p: Profile, signal: AbortSignal,
           stream.emitted = expected;
           stream.brokerConfirmed = Math.max(0, (device.confirmedPoints ?? 0) - (stream.emittedOffset ?? 0));
           const deadline = Date.now() + p.timeoutMs;
+          let deliveryConfirmed = false;
           do {
             const points = await finalClient.tripPositions(stream.startedAt, new Date(Date.now() + 1).toISOString(),
               key === "live" ? p.liveGuideId : p.guideId);
             const own = points.filter(v => v.gpsId === gpsId && Date.parse(v.fechaHora) >= Date.parse(stream.startedAt!));
             stream.received = new Set(own.map(v => v.messageId)).size;
             stream.lastAt = own.at(-1)?.fechaHora;
-            if (stream.received >= expected && (!expected || own.some(v => v.messageId === device.lastMessageId))) break;
-            if (Date.now() > deadline) throw new Error("Central no confirmó la última posición del GPS detenido");
+            if (stream.received >= expected && (!expected || own.some(v => v.messageId === device.lastMessageId))) {
+              deliveryConfirmed = true;
+              break;
+            }
+            if (Date.now() > deadline) break;
             await delay(p.pollMs);
           } while (true);
-          if (key === "live" && run.live) { run.live.receivedCount = stream.received; run.live.lastAt = stream.lastAt; }
+          if (!deliveryConfirmed) {
+            stream.status = "fallido";
+            stream.message += " · no se confirmó la entrega completa; revisar recepción y restaurar al finalizar";
+          } else if (key === "live" && run.live) { run.live.receivedCount = stream.received; run.live.lastAt = stream.lastAt; }
         }
       } catch {
         stream.status = "fallido";

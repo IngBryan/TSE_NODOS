@@ -1049,3 +1049,41 @@ test("detener seguimiento con desvío pausado conserva la preparación hasta dec
   assert.equal(load().status, "cancelado");
   assert.deepEqual(devices, originals);
 });
+
+for (const mode of ["todos", "concurrencia"]) {
+  test(`timeout al detener GPS en ${mode} queda fallido sin interrumpir el otro GPS ni ocultar errores`, async () => {
+    reset();
+    if (mode === "todos") {
+      failWeighing = true;
+      start("local", "todos");
+      await waitFor(() => load()?.steps.find(s => s.scenario === "carga")?.status === "fallido"
+        && (load()?.concurrent?.live?.received ?? 0) > 0);
+    } else {
+      start("local", "preparar_desvio");
+      await waitFor(() => !view().running);
+      start("local", "seguir_viaje");
+      await waitFor(() => (load()?.live?.receivedCount ?? 0) >= 1);
+      start("local", "continuar_desvio");
+      await waitFor(() => load()?.steps[0]?.status === "detectado");
+    }
+    missingPrefix = true;
+    stop("live");
+    await waitFor(() => load()?.concurrent?.live?.status === "fallido");
+    assert.match(load().concurrent.live.message, mode === "todos"
+      ? /Central no confirmó la última posición/ : /no se confirmó la entrega completa/);
+    assert.equal(scoped.get(100001).running, false);
+    assert.equal(scoped.get(2).running, true, "el fallo de entrega no detiene al GPS del desvío");
+    assert.equal(view().running, true);
+    missingPrefix = false;
+    stop();
+    await waitFor(() => !view().running);
+    assert.equal(load().concurrent.live.status, "fallido", "la parada global conserva el fallo del GPS");
+    if (mode === "todos") {
+      assert.equal(load().status, "fallido");
+      assert.match(load().steps.find(s => s.scenario === "carga").message, /balanza-no-disponible/);
+    } else
+      assert.equal(load().steps[0].status, "detectado");
+    assert.deepEqual(devices, originals);
+    assert.equal(load().cleanupRequired, false);
+  });
+}

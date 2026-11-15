@@ -50,7 +50,7 @@ npm start
 
 Abrir http://localhost:3100. La clave de acceso está en **`.env.local`, variable `PANEL_PASSWORD`**.
 El importador genera esa clave sin imprimirla. Las claves de TSE y OAuth quedan en
-`.local/profiles.json`; ambos archivos están ignorados por Git y Docker. En Ubuntu se crean con
+`.local/profiles.json`; ambos archivos están ignorados por Git. En Ubuntu se crean con
 permisos 600; en Windows, los permisos efectivos son las ACL de la cuenta que ejecuta el panel.
 Guardar los archivos privados en una carpeta accesible sólo a esa cuenta.
 La importación no modifica los entornos originales de Postman. Para repetir una importación,
@@ -70,7 +70,7 @@ Sólo debe estar funcionando el panel y ser accesibles los servicios remotos.
    la interrupción de Balanzas si la inició esta ejecución.
    **Detener y restaurar** también recupera una ejecución interrumpida.
 
-Los trabajos corren en el servidor y continúan aunque se cierre o recargue la pestaña. Sólo se
+Los trabajos corren en el proceso Node.js de la PC y continúan aunque se cierre o recargue la pestaña. Sólo se
 permite una sesión a la vez; la sesión conjunta controla tres GPS de forma independiente. La última ejecución y el snapshot de actividad de los GPS se guardan en disco.
 Si el proceso se reinicia, la ejecución se marca interrumpida y, si corresponde, se exige restaurar
 antes de iniciar otra. No reintenta automáticamente un pesaje para evitar duplicarlo.
@@ -248,7 +248,7 @@ desaparece el panel, y el diario conserva la restauración pendiente si falla su
 No se levanta una interrupción activa de otro operador. El Job de Kubernetes usado para el fallo
 esperado tiene `backoffLimit=0`, para impedir reintentos que se solapen con la recuperación.
 
-Requiere desplegar la versión actualizada de **Balanzas y del panel**, además del acceso al poller
+Requiere desplegar la versión actualizada de **Balanzas** y ejecutar el panel actualizado en la PC, además del acceso al poller
 descrito abajo. No requiere cambios en Central. Balanzas usa memoria, como el resto de su simulación:
 ejecutar con una sola réplica/proceso, igual que su almacén de pesajes.
 
@@ -260,7 +260,7 @@ El cron remoto mantiene su frecuencia de 30 minutos; las consultas a las APIs si
 
 Elastic Cloud usa `pollerMode: "ssh"` por defecto y conecta directamente a
 `6255-648@gate.elasticloud.uy:3022`, sin los menús del gateway. `sshHost`, `sshPort`, `sshUser`,
-`sshIdentityFile` y `sshKnownHostsFile` configuran la conexión desde el servidor del panel.
+`sshIdentityFile` y `sshKnownHostsFile` configuran la conexión desde la PC que ejecuta el panel.
 En Node sobre esta PC las rutas por defecto son `~/.ssh/ale_id_ed25519` y `~/.ssh/known_hosts`,
 resueltas con el usuario del proceso (en Windows, normalmente `C:/Users/usuario/.ssh/`).
 La privada debe ser legible sólo por ese usuario: permisos 600 en Ubuntu y ACL restringidas en Windows.
@@ -293,10 +293,10 @@ local y Balanzas debe ser la misma que consulta el Compose del Central.
 
 El poller es parte obligatoria de la demo conjunta y de exceso de carga. Si falta, se conserva el
 bloqueo del diagnóstico antes de iniciar los escenarios o registrar pesajes; no se omite ese caso.
-`pollerMode: "disabled"` sigue siendo la configuración del panel **dentro del contenedor Compose**,
-que no monta el socket Docker. Ese modo informa que está deshabilitado, sin exigir SSH para Local.
-Para la demo completa local usar `npm start` o `npm run dev` en el host con `LOCAL_POLLER_MODE=docker`.
-Docker no se admite para el perfil Elastic Cloud.
+Para la demo local usar `npm start` o `npm run dev` en la PC con `LOCAL_POLLER_MODE=docker`.
+Si una configuración anterior conserva `pollerMode: "disabled"`, cambiarla a `docker` para Local
+o `ssh` para Elastic Cloud; el diagnóstico informa el bloqueo hasta corregirla.
+El perfil Elastic Cloud usa SSH para el poller y no requiere Docker en la PC.
 
 SSH utiliza `-F none`, la opción de [OpenSSH](https://man.openbsd.org/ssh#F) para ignorar los archivos
 de configuración del host sin depender de `/dev/null`. Las rutas de `known_hosts` se pasan entre
@@ -307,48 +307,24 @@ desde una sesión de confianza. Los comandos remotos tienen argumentos fijos y e
 infraestructura no se devuelven al navegador. Se evita iniciar una ejecución cerca del turno de media
 hora para no solaparla con el cron; coordinar también con cualquier ejecución externa/manual.
 
-## Docker y cloud
+## Ejecución del panel en la PC
 
-```bash
-npm run build
-npm start
-# o construir la imagen independiente:
-docker build -t panel-simulador .
-```
+El panel se ejecuta con Node.js en Ubuntu o Windows y escucha por defecto en `127.0.0.1:3100`.
+Se usa el mismo proceso para controlar cualquiera de los dos ambientes:
 
-En `TSE_NODOS`, el perfil opcional permite levantar sólo el panel:
+| Ambiente | Central y nodos | Ejecución del poller desde el panel |
+| --- | --- | --- |
+| Local | Docker Compose en la PC | Docker CLI local |
+| Elastic Cloud | Kubernetes en Elastic Cloud y nodos en OpenShift | SSH al gateway y Job del CronJob remoto |
 
-```bash
-docker compose --profile demo up --build -d panel-simulador
-```
+El Compose de `TSE_NODOS` levanta Tracking, Balanzas y PDI. El Compose de `TSE_CENTRAL` mantiene
+los servicios del Central y `fiscalizacionautomatica-poller` para las pruebas locales.
+En Windows se usa Docker Desktop con contenedores Linux para esos componentes.
 
-Preparar antes `.env.local` y `.local/profiles.json`. El Compose monta configuración de sólo lectura
-y un volumen de estado. Ejecuta el panel con UID 1000 por defecto para leer el archivo privado con
-permisos 600. Si el usuario del host tiene otro UID, definir `PANEL_UID` en el `.env` de los nodos.
-El Compose monta la privada y `known_hosts` de sólo lectura desde la carpeta `.ssh` del usuario
-(`USERPROFILE` en Windows o `HOME` en Ubuntu) por defecto.
-Para otro host ajustar `PANEL_SSH_IDENTITY_FILE`, `PANEL_SSH_KNOWN_HOSTS_FILE` y `PANEL_UID`
-en `TSE_NODOS/.env` o el entorno de Compose. El panel usa las rutas internas `/app/ssh/identity`
-y `/app/ssh/known_hosts` para Elastic Cloud. No necesita socket Docker ni kubeconfig.
-
-La imagen standalone incluye Node y el cliente OpenSSH (además de las CLI existentes). Se ejecuta sin root y expone 3100.
-La workflow `panel-simulador-image.yml` construye su propia imagen en GHCR al llegar a `main`.
-`deploy/kubernetes.yaml` incluye PVC, Deployment de **una réplica**, estrategia Recreate y Service;
-`deploy/rbac.yaml` conserva la cuenta existente; para SSH los permisos Kubernetes se usan en el nodo remoto.
-No se han aplicado estos manifiestos a cloud.
-
-Crear `panel-simulador-config` con `profiles.json`, `PANEL_PASSWORD` y `PANEL_SESSION_SECRET`,
-y montar configuración/estado. Para un Kubernetes estándar configurar el grupo del volumen para
-que el usuario del contenedor pueda escribir; OpenShift asigna UID/grupo mediante su SCC. Si el
-cluster exige autenticación para GHCR, agregar `imagePullSecrets`. Exponer el Service mediante
-Route/Ingress **HTTPS** y definir `PANEL_PUBLIC_ORIGIN` con ese origen exacto. Las cookies seguras
-están activadas en el manifiesto. Para ejecutar el poller desde ese despliegue, montar la privada y
-`known_hosts` como archivos legibles por su usuario, con permisos adecuados para SSH, y configurar
-`CLOUD_SSH_IDENTITY_FILE` y `CLOUD_SSH_KNOWN_HOSTS_FILE` con esas rutas. Los manifiestos existentes
-no montan esas credenciales: el acceso cloud del panel debe poder alcanzar el gateway en el puerto 3022.
-
-No desplegar como exportación estática, función efímera o varias réplicas: la coordinación es un
-proceso Node persistente, con bloqueo y diario en un volumen compartido por sus rutas del servidor.
+Mantener un único proceso del panel. Su bloqueo y diario de ejecución se guardan en `.local/state`
+(o `PANEL_STATE_DIR`); el proceso Node debe seguir activo durante el ensayo. Las claves y perfiles
+permanecen en la PC también al controlar el ambiente cloud. La PC debe poder alcanzar el gateway
+en el puerto 3022. Los permisos Kubernetes del poller corresponden al usuario del nodo remoto.
 La clave del panel protege las acciones; requiere como mínimo 12 caracteres y la sesión dura 8 horas.
 Las mutaciones comprueban el origen y la sesión; las credenciales del Central nunca se envían al cliente.
 

@@ -62,6 +62,7 @@ export async function allDemo(run: Run, p: Profile, signal: AbortSignal,
           // A stop before confirmation remains cancelled, never reported as success.
           if (key !== "infractions" || movement?.caseId) {
             const deadline = Date.now() + p.timeoutMs;
+            let deliveryConfirmed = false;
             do {
               const points = key === "infractions"
                 ? await final.positions(movement!.caseId!, undefined, ids[key])
@@ -70,10 +71,17 @@ export async function allDemo(run: Run, p: Profile, signal: AbortSignal,
               stream.received = new Set(own.map(v => v.messageId)).size;
               stream.lastAt = own.at(-1)?.fechaHora;
               if (key === "live" && run.live) { run.live.receivedCount = stream.received; run.live.lastAt = stream.lastAt; }
-              if (stream.received >= stream.emitted && (!stream.emitted || own.some(v => v.messageId === device.lastMessageId))) break;
-              if (Date.now() >= deadline) throw new Error("Central no confirmó la última posición del GPS detenido.");
+              if (stream.received >= stream.emitted && (!stream.emitted || own.some(v => v.messageId === device.lastMessageId))) {
+                deliveryConfirmed = true;
+                break;
+              }
+              if (Date.now() >= deadline) break;
               await delay(p.pollMs);
             } while (true);
+            if (!deliveryConfirmed) {
+              status = "fallido";
+              message += " Central no confirmó la última posición del GPS detenido.";
+            }
           }
         }
       } catch (error) {
