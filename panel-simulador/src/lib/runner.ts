@@ -4,7 +4,7 @@ import { checkAvailability, exerciseOutage, restoreBalanzas } from "./balanzas-r
 import { validateNoGuideContext } from "./infractions.ts";
 import { followTrip } from "./live-trip.ts";
 import { prepareDetour, resumeDetour } from "./detour.ts";
-import { Client, delay } from "./client.ts";
+import { Client, delay, HttpError } from "./client.ts";
 import { profile, missing, publicProfiles } from "./config.ts";
 import { evidenceDates, freshEvidence } from "./evidence.ts";
 import { checkPoller, poller } from "./poller.ts";
@@ -21,6 +21,7 @@ import type {
   TrackingState,
   Position,
   StreamKey,
+  Device,
 } from "./types.ts";
 
 const g = globalThis as unknown as {
@@ -57,11 +58,21 @@ async function restore(run: Run, p: Profile) {
   try {
     await client.stop();
     if (run.gpsBackup) {
-      for (const d of run.gpsBackup)
-        await client.node("tracking", `/api/gps-devices/${d.id}`, "PUT", {
-          licensePlate: d.licensePlate,
-          active: d.active,
-        });
+      for (const d of run.gpsBackup) {
+        let restored: Device;
+        try {
+          restored = await client.node<Device>("tracking", `/api/gps-devices/${d.id}`, "PUT", {
+            licensePlate: d.licensePlate,
+            active: d.active,
+          });
+        } catch (error) {
+          // Tracking's in-memory GPS store is reset when the node restarts.
+          if (!(error instanceof HttpError) || error.status !== 404) throw error;
+          restored = await client.node<Device>("tracking", "/api/gps-devices", "POST", d);
+        }
+        if (restored.id !== d.id || restored.licensePlate !== d.licensePlate || restored.active !== d.active)
+          throw new Error(`Tracking no confirmó la restauración del GPS ${d.id}.`);
+      }
       delete run.gpsBackup;
     }
     delete run.prepared;

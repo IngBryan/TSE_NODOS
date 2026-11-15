@@ -161,11 +161,14 @@ export function publicProfiles() {
   return (["local", "elasticcloud"] as const).map((id) => {
     try {
       const p = profile(id);
+      const accessUrl = new URL(`${p.platformUrl}/auth/testing`);
+      accessUrl.searchParams.set("cedula", p.funcionarioCi);
       return {
         id,
         name: id === "local" ? "Local" : "Elastic Cloud",
         missing: missing(p),
         platformUrl: p.platformUrl,
+        platformAccessUrl: accessUrl.href,
         centralUrl: p.centralUrl,
         trackingUrl: p.trackingUrl,
         balanzasUrl: p.balanzasUrl,

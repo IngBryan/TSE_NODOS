@@ -62,6 +62,9 @@ Sólo debe estar funcionando el panel y ser accesibles los servicios remotos.
 ## Operación
 
 1. Elegir **Local** o **Elastic Cloud** y pulsar **Comprobar ambiente**.
+   **Abrir plataforma** ingresa por `/auth/testing?cedula=...`, usando `funcionarioCi` del perfil.
+   Usar ese acceso primero para iniciar sesión; después, los enlaces de viajes abren cada viaje con esa sesión.
+   Requiere el login de testing habilitado en Central.
 2. Corregir las condiciones que aparezcan: acceso del funcionario, guía, GPS, nodos y cadencia.
 3. Elegir un escenario o **Ejecutar todos en paralelo**.
 4. El panel muestra progreso, expediente, duración y evidencia. Mantener la plataforma abierta

@@ -7,6 +7,7 @@ interface PublicProfile {
   name: string;
   missing: string[];
   platformUrl: string;
+  platformAccessUrl?: string;
   centralUrl?: string;
   trackingUrl?: string;
   balanzasUrl?: string;
@@ -136,7 +137,7 @@ export default function Home() {
         </div>
         <a
           className="link"
-          href={p?.platformUrl || "#"}
+          href={p?.platformAccessUrl || "#"}
           target="_blank"
           rel="noreferrer"
         >

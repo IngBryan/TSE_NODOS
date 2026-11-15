@@ -29,6 +29,7 @@ let devices = structuredClone(originals),
   interval = 5,
   weighing = null,
   failRestore = false,
+  failGpsCreate = false,
   prepared = false,
   liveDetour = false,
   staleConfiguration = false,
@@ -167,8 +168,11 @@ const server = http.createServer(async (req, res) => {
     tracking = [...scoped.values()].some(d => d.running);
     data = { configuration: device };
   } else if (url.pathname === "/api/gps-devices" && req.method === "POST") {
-    data = { id: body.id, licensePlate: body.licensePlate, active: body.active };
-    devices.push(data);
+    if (failGpsCreate) { status = 503; data = { error: "create-failed" }; }
+    else {
+      data = { id: body.id, licensePlate: body.licensePlate, active: body.active };
+      devices.push(data);
+    }
   } else if (url.pathname === "/api/gps-devices")
     data =
       url.searchParams.get("active") === "true"
@@ -194,8 +198,8 @@ const server = http.createServer(async (req, res) => {
       const d = devices.find(
         (d) => d.id === Number(url.pathname.split("/")[3]),
       );
-      Object.assign(d, body);
-      data = d;
+      if (!d) { status = 404; data = { error: "GPS device not found" }; }
+      else { Object.assign(d, body); data = d; }
     }
   } else if (url.pathname === "/casos")
     data = { casos: summaries.filter(s => s.tipoCaso !== "DESVIO_RUTA" || liveDetour), totalPaginas: 1 };
@@ -405,6 +409,7 @@ function reset() {
   interval = 5;
   weighing = null;
   failRestore = false;
+  failGpsCreate = false;
   prepared = liveDetour = staleConfiguration = recentGuide = missingPrefix = false;
   prefixDates = [];
   following = finishLive = false;
@@ -624,6 +629,30 @@ test("restauración fallida bloquea ensayos hasta recuperación explícita", asy
   await waitFor(() => !view().running);
   assert.equal(load().cleanupRequired, false);
   assert.deepEqual(devices, originals);
+});
+test("restaurar recupera GPS perdidos al reiniciar Tracking y conserva el snapshot si falla su alta", async () => {
+  reset();
+  const now = new Date().toISOString();
+  save({ id: "pending-restore", target: "local", selection: "restaurar", factor: 1,
+    status: "fallido", message: "Tracking reiniciado", startedAt: now, updatedAt: now,
+    checks: [], steps: [], logs: [], gpsBackup: originals, cleanupRequired: true });
+  devices = structuredClone(originals).filter(d => d.id !== 100001);
+  devices[0].active = !originals[0].active;
+  failGpsCreate = true;
+  start("local", "restaurar");
+  await waitFor(() => !view().running);
+  assert.equal(load().status, "fallido");
+  assert.equal(load().cleanupRequired, true);
+  assert.deepEqual(load().gpsBackup, originals);
+  assert.match(load().message, /503.*create-failed/);
+  assert.throws(() => start("local", "sin_guia"), /restauración/);
+  failGpsCreate = false;
+  start("local", "restaurar");
+  await waitFor(() => !view().running);
+  assert.equal(load().status, "completado");
+  assert.equal(load().cleanupRequired, false);
+  assert.equal(load().gpsBackup, undefined);
+  assert.deepEqual(devices, originals, "restaura ID, matrícula y actividad del GPS desaparecido");
 });
 test("reinicio conserva snapshot y exige restauración", async () => {
   reset();
