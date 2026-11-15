@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 const args = process.argv.slice(2),
   profiles = {};
 const map = {
@@ -79,11 +78,7 @@ const env = path.resolve(".env.local");
 if (!fs.existsSync(env)) {
   fs.writeFileSync(
     env,
-    "PANEL_CONFIG_FILE=.local/profiles.json\nPANEL_STATE_DIR=.local/state\nPANEL_PASSWORD=" +
-      crypto.randomBytes(18).toString("base64url") +
-      "\nPANEL_SESSION_SECRET=" +
-      crypto.randomBytes(32).toString("hex") +
-      "\n",
+    "PANEL_CONFIG_FILE=.local/profiles.json\nPANEL_STATE_DIR=.local/state\n",
     { mode: 0o600 },
   );
 } else {
@@ -100,5 +95,5 @@ console.log(
     ". Credenciales privadas guardadas en .local/profiles.json.",
 );
 console.log(
-  "La clave del panel está en .env.local (PANEL_PASSWORD). No se imprimieron secretos.",
+  "Configuración del panel en .env.local. No se imprimieron secretos.",
 );

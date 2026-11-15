@@ -40,7 +40,6 @@ export function view() {
     profiles: publicProfiles(),
     run: recover(),
     running: !!g.panelJob,
-    authenticationConfigured: !!process.env.PANEL_PASSWORD,
   };
 }
 function log(run: Run, message: string) {

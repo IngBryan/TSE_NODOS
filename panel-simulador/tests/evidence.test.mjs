@@ -1,12 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { freshEvidence } from "../src/lib/evidence.ts";
-import {
-  authenticated,
-  sessionValue,
-  validPassword,
-  sameOrigin,
-} from "../src/lib/auth.ts";
+import { sameOrigin } from "../src/lib/origin.ts";
 const now = Date.now(),
   a = new Date(now - 2000).toISOString(),
   b = new Date(now - 1000).toISOString();
@@ -128,27 +123,14 @@ test("habilitación exige prueba de Tracking con documentación inválida", () =
     null,
   );
 });
-test("sesión firmada y rechazo de origen externo", () => {
-  process.env.PANEL_PASSWORD = "clave-de-prueba-larga";
-  assert.equal(validPassword("incorrecta"), false);
-  assert.equal(validPassword(process.env.PANEL_PASSWORD), true);
-  const token = sessionValue(),
-    req = new Request("http://localhost:3100/api/control", {
-      headers: {
-        cookie: "panel_session=" + token,
-        origin: "http://localhost:3100",
-      },
-    });
-  assert.equal(authenticated(req), true);
+test("acciones locales aceptan el origen propio sin cookies y rechazan origen externo o ausente", () => {
+  const req = new Request("http://localhost:3100/api/control", {
+    headers: {
+      origin: "http://localhost:3100",
+    },
+  });
   assert.equal(sameOrigin(req), true);
-  assert.equal(
-    authenticated(
-      new Request(req.url, {
-        headers: { cookie: "panel_session=" + token + "x" },
-      }),
-    ),
-    false,
-  );
+  assert.equal(sameOrigin(new Request(req.url)), false);
   assert.equal(
     sameOrigin(
       new Request(req.url, { headers: { origin: "https://otro.example" } }),
@@ -157,8 +139,8 @@ test("sesión firmada y rechazo de origen externo", () => {
   );
 });
 
-test("origen respeta el host externo del puerto publicado por Docker", () => {
-  const request = new Request("http://0.0.0.0:3100/api/session", {
+test("origen respeta el host y el puerto del panel", () => {
+  const request = new Request("http://0.0.0.0:3100/api/control", {
     headers: { host: "localhost:3102", origin: "http://localhost:3102" },
   });
   assert.equal(sameOrigin(request), true);

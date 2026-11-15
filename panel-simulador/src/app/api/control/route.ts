@@ -1,10 +1,8 @@
-import { authenticated, sameOrigin } from "@/lib/auth";
+import { sameOrigin } from "@/lib/origin";
 import { start, stop, view } from "@/lib/runner";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export async function GET(request: Request) {
-  if (!authenticated(request))
-    return Response.json({ error: "Iniciar sesión." }, { status: 401 });
+export async function GET() {
   try {
     return Response.json(view(), { headers: { "Cache-Control": "no-store" } });
   } catch {
@@ -18,8 +16,6 @@ export async function GET(request: Request) {
   }
 }
 export async function POST(request: Request) {
-  if (!authenticated(request))
-    return Response.json({ error: "Iniciar sesión." }, { status: 401 });
   if (!sameOrigin(request))
     return Response.json({ error: "Origen no permitido." }, { status: 403 });
   try {

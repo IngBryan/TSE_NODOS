@@ -45,11 +45,6 @@ const time = (value: string) =>
     second: "2-digit",
   });
 export default function Home() {
-  const [session, setSession] = useState<"loading" | "login" | "ready">(
-      "loading",
-    ),
-    [configured, setConfigured] = useState(true),
-    [password, setPassword] = useState("");
   const [data, setData] = useState<State | null>(null),
     [target, setTarget] = useState<Target>("elasticcloud"),
     [pending, setPending] = useState(false),
@@ -59,11 +54,6 @@ export default function Home() {
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/control", { cache: "no-store" });
-      if (res.status === 401) {
-        setSession("login");
-        setData(null);
-        return;
-      }
       if (!res.ok) throw new Error();
       const next = (await res.json()) as State;
       setData(next);
@@ -75,54 +65,13 @@ export default function Home() {
     }
   }, []);
   useEffect(() => {
-    let active = true;
-    fetch("/api/session", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((s) => {
-        if (active) {
-          setConfigured(s.configured);
-          setSession(s.authenticated ? "ready" : "login");
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setSession("login");
-          setError("No se pudo conectar al panel.");
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-  useEffect(() => {
-    if (session !== "ready") return;
     const first = setTimeout(() => void refresh(), 0);
     const timer = setInterval(() => void refresh(), 1500);
     return () => {
       clearTimeout(first);
       clearInterval(timer);
     };
-  }, [session, refresh]);
-  async function login(event: React.FormEvent) {
-    event.preventDefault();
-    setPending(true);
-    setError("");
-    try {
-      const r = await fetch("/api/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
-      const body = await r.json();
-      if (!r.ok) throw new Error(body.error);
-      setPassword("");
-      setSession("ready");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo ingresar.");
-    } finally {
-      setPending(false);
-    }
-  }
+  }, [refresh]);
   async function act(selection: Selection | "stop", stream?: StreamKey) {
     setPending(true);
     setError("");
@@ -154,44 +103,11 @@ export default function Home() {
   const canStartLive = prepared && !busy && connected && !p?.missing.length;
   const blocked =
     busy || !!p?.missing.length || !!run?.cleanupRequired || !connected;
-  if (session === "loading")
+  if (!data)
     return (
-      <main className="login">
-        <p>Conectando al panel…</p>
-      </main>
-    );
-  if (session === "login")
-    return (
-      <main className="login">
-        <form onSubmit={login}>
-          <span className="eyebrow">TSE · NODOS PERIFÉRICOS</span>
-          <h1>Panel de nodos periféricos</h1>
-          <p>Control de escenarios y verificación de evidencia.</p>
-          {!configured && (
-            <div className="notice">
-              Falta configurar la clave de acceso del panel en el servidor.
-              Consultá el README.
-            </div>
-          )}
-          <label htmlFor="password">Clave del panel</label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoFocus
-          />
-          {error && (
-            <p className="error" role="alert">
-              {error}
-            </p>
-          )}
-          <button disabled={pending || !configured} type="submit">
-            {pending ? "Ingresando…" : "Ingresar"}
-          </button>
-        </form>
+      <main className="shell">
+        <h1>Panel de nodos periféricos</h1>
+        <p role="status">{connected ? "Conectando al panel…" : "No se pudo conectar al panel. Reintentando…"}</p>
       </main>
     );
   return (
@@ -201,16 +117,6 @@ export default function Home() {
           <span className="eyebrow">TSE · NODOS PERIFÉRICOS</span>
           <h1>Panel de nodos periféricos</h1>
         </div>
-        <button
-          className="quiet"
-          onClick={async () => {
-            await fetch("/api/session", { method: "DELETE" });
-            setSession("login");
-            setData(null);
-          }}
-        >
-          Salir
-        </button>
       </header>
       <section className="toolbar" aria-label="Configuración de ejecución">
         <label>

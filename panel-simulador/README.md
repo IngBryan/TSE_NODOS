@@ -48,8 +48,8 @@ npm run build
 npm start
 ```
 
-Abrir http://localhost:3100. La clave de acceso está en **`.env.local`, variable `PANEL_PASSWORD`**.
-El importador genera esa clave sin imprimirla. Las claves de TSE y OAuth quedan en
+Abrir http://localhost:3100; el panel local se abre directamente, sin contraseña ni inicio de sesión.
+La configuración del panel está en `.env.local` y las claves de TSE y OAuth quedan en
 `.local/profiles.json`; ambos archivos están ignorados por Git. En Ubuntu se crean con
 permisos 600; en Windows, los permisos efectivos son las ACL de la cuenta que ejecuta el panel.
 Guardar los archivos privados en una carpeta accesible sólo a esa cuenta.
@@ -325,8 +325,7 @@ Mantener un único proceso del panel. Su bloqueo y diario de ejecución se guard
 (o `PANEL_STATE_DIR`); el proceso Node debe seguir activo durante el ensayo. Las claves y perfiles
 permanecen en la PC también al controlar el ambiente cloud. La PC debe poder alcanzar el gateway
 en el puerto 3022. Los permisos Kubernetes del poller corresponden al usuario del nodo remoto.
-La clave del panel protege las acciones; requiere como mínimo 12 caracteres y la sesión dura 8 horas.
-Las mutaciones comprueban el origen y la sesión; las credenciales del Central nunca se envían al cliente.
+Las mutaciones comprueban el origen de la petición; las credenciales del Central nunca se envían al cliente.
 
 ## Validación
 
