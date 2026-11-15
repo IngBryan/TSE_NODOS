@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { resolvePanelPath } from "../../scripts/paths.mjs";
 import type { Profile, Target } from "./types.ts";
 
 export function profile(target: Target): Profile {
@@ -45,12 +46,12 @@ export function profile(target: Target): Profile {
     pollMs: 2000,
     requestTimeoutMs: 15000,
     pollerMode: cloud ? "ssh" : "docker",
-    composeFile: path.resolve(process.cwd(), "../../TSE_CENTRAL/docker-compose.yml"),
+    composeFile: resolvePanelPath("../../TSE_CENTRAL/docker-compose.yml"),
     sshHost: cloud ? "gate.elasticloud.uy" : "",
     sshPort: 3022,
     sshUser: cloud ? "6255-648" : "",
-    sshIdentityFile: path.join(os.homedir(), ".ssh/ale_id_ed25519"),
-    sshKnownHostsFile: path.join(os.homedir(), ".ssh/known_hosts"),
+    sshIdentityFile: path.join(os.homedir(), ".ssh", "ale_id_ed25519"),
+    sshKnownHostsFile: path.join(os.homedir(), ".ssh", "known_hosts"),
     namespace: "tse",
     cronjob: "fiscalizacionautomatica-poller",
     pollerTimeoutMs: 180000,
@@ -59,7 +60,7 @@ export function profile(target: Target): Profile {
   let source = {};
   try {
     source = file
-      ? (JSON.parse(fs.readFileSync(path.resolve(file), "utf8"))[target] ?? {})
+      ? (JSON.parse(fs.readFileSync(resolvePanelPath(file), "utf8"))[target] ?? {})
       : {};
   } catch {
     throw new Error(
@@ -80,6 +81,9 @@ export function profile(target: Target): Profile {
           ? JSON.parse(value)
           : value;
   }
+  for (const key of [
+    "composeFile", "sshIdentityFile", "sshKnownHostsFile",
+  ] as const) p[key] = resolvePanelPath(p[key]);
   for (const key of [
     "centralUrl",
     "trackingUrl",

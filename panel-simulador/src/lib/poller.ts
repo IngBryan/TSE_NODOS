@@ -23,16 +23,19 @@ export function command(
   return new Promise((resolve, reject) => {
     signal.throwIfAborted();
     const child = spawn(binary, args, {
-      signal,
       stdio: ["pipe", "pipe", "pipe"],
       env: process.env,
+      shell: false,
+      windowsHide: true,
     });
     child.stdin.on("error", () => {}); // SSH can close stdin early when authentication fails.
     child.stdin.end(input);
     let output = "";
     let timedOut = false;
+    let outputExceeded = false;
     let hardKill: ReturnType<typeof setTimeout> | undefined;
     const terminate = () => {
+      if (hardKill || child.exitCode !== null || child.signalCode !== null) return;
       child.kill("SIGTERM");
       hardKill = setTimeout(() => child.kill("SIGKILL"), 2000);
       hardKill.unref();
@@ -45,7 +48,11 @@ export function command(
     // Output can contain infrastructure secrets: only JSON consumed internally is returned.
     child.stdout.on("data", (b) => {
       output += b.toString();
-      if (output.length > 4_000_000) child.kill("SIGTERM");
+      if (output.length > 4_000_000) {
+        outputExceeded = true;
+        output = "";
+        terminate();
+      }
     });
     child.stderr.resume();
     child.on("error", () => {
@@ -54,7 +61,11 @@ export function command(
       signal.removeEventListener("abort", terminate);
       reject(
         new Error(
-          `${binary}: no disponible o ejecución cancelada. Revisar la configuración del poller.`,
+          binary === "docker"
+            ? "Docker no disponible en PATH. Instalar Docker con Compose (Docker Desktop con contenedores Linux en Windows) y reiniciar el panel."
+            : binary === "ssh"
+              ? "OpenSSH no disponible en PATH. Instalar el cliente OpenSSH en el equipo que ejecuta el panel y reiniciarlo."
+              : "No se pudo iniciar el ejecutor del poller. Revisar su instalación y permisos.",
         ),
       );
     });
@@ -62,11 +73,13 @@ export function command(
       clearTimeout(timer);
       clearTimeout(hardKill);
       signal.removeEventListener("abort", terminate);
-      if (code !== 0 || timedOut)
+      // Wait for the process to close before cleanup starts, also on Windows.
+      if (signal.aborted) reject(new Error("Ejecución cancelada."));
+      else if (code !== 0 || timedOut || outputExceeded)
         reject(
           new CommandFailed(
             `${binary}: ${timedOut ? "tiempo agotado" : "falló el ejecutor o el acceso al entorno"}. Revisar sus logs en la infraestructura.`,
-            code, timedOut,
+            outputExceeded ? null : code, timedOut,
           ),
         );
       else resolve(output);
@@ -88,17 +101,34 @@ function sshConfig(p: Profile) {
     } catch { throw new Error(`No se puede leer ${name} de SSH en el servidor del panel. Revisar ruta y permisos.`); }
   }
 }
+function requirePoller(p: Profile) {
+  if (p.pollerMode === "disabled")
+    throw new Error("El poller está deshabilitado. Para la demo local, ejecutar el panel con Node.js en Ubuntu o Windows y LOCAL_POLLER_MODE=docker, con Docker y Central levantados. Para Elastic Cloud, configurar CLOUD_POLLER_MODE=ssh y el acceso al gateway.");
+  if (p.pollerMode !== "docker" && p.pollerMode !== "ssh")
+    throw new Error("Modo de poller inválido. Usar docker para Local o ssh para Elastic Cloud.");
+}
 function remote(p: Profile, args: string[], signal: AbortSignal, timeout: number, input?: string) {
   // OpenSSH invokes the remote shell: quote each argument even though no local shell is used.
   const cmd = ["kubectl", "--request-timeout=10s", "-n", p.namespace, ...args].map(quote).join(" ");
-  return command("ssh", ["-F", "/dev/null", "-T", "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
+  // -F none disables host config on both OpenSSH for Windows and Unix.
+  // -o has its own parser: quote paths containing spaces even without a local shell.
+  const knownHosts = process.platform === "win32" ? p.sshKnownHostsFile.replace(/\\/g, "/") : p.sshKnownHostsFile;
+  return command("ssh", ["-F", "none", "-T", "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
     "-o", "StrictHostKeyChecking=yes", "-o", "UpdateHostKeys=no", "-o", "ConnectTimeout=10",
     "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2",
-    "-o", "UserKnownHostsFile=" + p.sshKnownHostsFile,
+    "-o", "UserKnownHostsFile=" + JSON.stringify(knownHosts.replace(/%/g, "%%")),
     "-i", p.sshIdentityFile, "-p", String(p.sshPort), p.sshUser + "@" + p.sshHost, cmd], signal, timeout, input);
 }
 export async function checkPoller(p: Profile, signal: AbortSignal) {
+  requirePoller(p);
   if (p.pollerMode === "docker") {
+    try {
+      if (!path.isAbsolute(p.composeFile) || !fs.statSync(p.composeFile).isFile()) throw new Error();
+      fs.accessSync(p.composeFile, fs.constants.R_OK);
+    } catch { throw new Error("No se puede leer el Compose del Central. Configurar LOCAL_COMPOSE_FILE con la ruta al docker-compose.yml de TSE_CENTRAL en este equipo."); }
+    const configured = await command("docker", ["compose", "--profile", "*", "-f", p.composeFile, "config", "--services"], signal, 15000);
+    if (!configured.trim().split(/\s+/).includes("fiscalizacionautomatica-poller"))
+      throw new Error("El Compose configurado no contiene fiscalizacionautomatica-poller. Revisar LOCAL_COMPOSE_FILE.");
     const active = await command(
       "docker",
       [
@@ -134,6 +164,7 @@ export async function poller(
   log: (message: string) => void,
   options: { singleAttempt?: boolean } = {},
 ) {
+  requirePoller(p);
   if (p.pollerMode === "docker") await checkPoller(p, signal);
   if (p.pollerMode === "docker") {
     const args = ["compose", "-f", p.composeFile];

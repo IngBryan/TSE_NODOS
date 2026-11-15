@@ -4,9 +4,14 @@ Aplicación Next.js independiente, al mismo nivel que Tracking, Balanzas y PDI. 
 por sus APIs y verifica evidencia nueva en Central. No publica GPS directamente en RabbitMQ,
 no inserta expedientes y no modifica las reglas del Central. Postman queda como herramienta auxiliar.
 
-## Inicio en esta PC
+## Inicio en Ubuntu y Windows
 
-Requiere Node.js 24. Desde `TSE_NODOS/panel-simulador`:
+El mismo panel se ejecuta directamente con Node.js 24 en Ubuntu o Windows. Para el ambiente
+**Local**, Central y los nodos deben estar levantados en Docker; en Windows usar Docker Desktop
+con contenedores Linux. Para **Elastic Cloud**, se necesita el cliente OpenSSH en el PATH del
+proceso del panel; `kubectl` se ejecuta en el servidor remoto, no se instala en Windows.
+
+Desde `TSE_NODOS/panel-simulador`, importar las credenciales de Postman:
 
 ```bash
 npm ci
@@ -14,9 +19,40 @@ npm run import:postman -- --local /ruta/Local/Entorno.postman_environment.json -
 npm run dev
 ```
 
+En PowerShell, poner entre comillas las rutas de los entornos:
+
+```powershell
+cd "C:\ruta\TSE_NODOS\panel-simulador"
+npm ci
+npm run import:postman -- --local "C:\ruta\Local\Entorno.postman_environment.json" --cloud "C:\ruta\Cloud\Entorno.postman_environment.json"
+npm run dev
+```
+
+Si `TSE_NODOS` y `TSE_CENTRAL` son carpetas hermanas, la ruta predeterminada de Compose funciona
+en ambos sistemas. Si están en otras ubicaciones, configurar `LOCAL_COMPOSE_FILE` en `.env.local`
+o `composeFile` en el perfil `local` de `.local/profiles.json`. Una variable de entorno tiene prioridad
+sobre el perfil. Todas las rutas relativas se resuelven desde la carpeta del panel, también con
+`npm start`; las rutas de Compose y SSH admiten espacios y `~/` para la carpeta del usuario.
+En `.env.local` de Windows conviene usar barras `/`, por ejemplo:
+
+```dotenv
+LOCAL_COMPOSE_FILE="C:/Mis proyectos/TSE_CENTRAL/docker-compose.yml"
+CLOUD_SSH_IDENTITY_FILE="C:/Users/Mi usuario/.ssh/ale_id_ed25519"
+CLOUD_SSH_KNOWN_HOSTS_FILE="C:/Users/Mi usuario/.ssh/known_hosts"
+```
+
+Para ejecutar una compilación de producción, tanto en Ubuntu como en PowerShell:
+
+```text
+npm run build
+npm start
+```
+
 Abrir http://localhost:3100. La clave de acceso está en **`.env.local`, variable `PANEL_PASSWORD`**.
 El importador genera esa clave sin imprimirla. Las claves de TSE y OAuth quedan en
-`.local/profiles.json`, con permisos 600; ambos archivos están ignorados por Git y Docker.
+`.local/profiles.json`; ambos archivos están ignorados por Git y Docker. En Ubuntu se crean con
+permisos 600; en Windows, los permisos efectivos son las ACL de la cuenta que ejecuta el panel.
+Guardar los archivos privados en una carpeta accesible sólo a esa cuenta.
 La importación no modifica los entornos originales de Postman. Para repetir una importación,
 se actualizan las propiedades importadas del perfil elegido; volver a revisar sus ajustes del poller.
 
@@ -226,14 +262,15 @@ Elastic Cloud usa `pollerMode: "ssh"` por defecto y conecta directamente a
 `6255-648@gate.elasticloud.uy:3022`, sin los menús del gateway. `sshHost`, `sshPort`, `sshUser`,
 `sshIdentityFile` y `sshKnownHostsFile` configuran la conexión desde el servidor del panel.
 En Node sobre esta PC las rutas por defecto son `~/.ssh/ale_id_ed25519` y `~/.ssh/known_hosts`,
-resueltas con el usuario del proceso. La privada debe ser legible por ese usuario y tener permisos 600.
+resueltas con el usuario del proceso (en Windows, normalmente `C:/Users/usuario/.ssh/`).
+La privada debe ser legible sólo por ese usuario: permisos 600 en Ubuntu y ACL restringidas en Windows.
 Nunca copiarla al repositorio ni usar el archivo `.pub` como clave privada. Si tiene passphrase,
 precargar la identidad en un agente accesible al proceso: la conexión no admite preguntas interactivas.
 
 Desde una terminal local se puede comprobar el acceso sin crear Jobs:
 
 ```bash
-ssh -T -o BatchMode=yes -i ~/.ssh/ale_id_ed25519 -p 3022 \
+ssh -F none -T -o BatchMode=yes -i ~/.ssh/ale_id_ed25519 -p 3022 \
   6255-648@gate.elasticloud.uy \
   'kubectl -n tse get cronjob fiscalizacionautomatica-poller -o name'
 ```
@@ -249,12 +286,21 @@ El perfil **Local**, ejecutando el panel con Node en el host, usa `pollerMode: "
 `composeFile` apunta al `docker-compose.yml` de TSE_CENTRAL (también configurable con
 `LOCAL_COMPOSE_FILE`). Comprueba WildFly y MongoDB, evita otro poller simultáneo y ejecuta un
 contenedor efímero con `--no-deps`; al finalizar o cancelar limpia sólo ese contenedor.
+El diagnóstico verifica también que exista el archivo Compose y que incluya el servicio
+`fiscalizacionautomatica-poller`, incluso si pertenece al perfil `cron`.
 No utiliza conexiones SSH ni URLs de cloud para la prueba local. Tracking debe publicar al RabbitMQ
 local y Balanzas debe ser la misma que consulta el Compose del Central.
 
-`pollerMode: "disabled"` bloquea carga antes de registrar pesajes y sigue siendo la configuración
-del panel **dentro del contenedor Compose**, que no monta el socket Docker. Para la prueba completa
-local usar `npm start` o `npm run dev` en el host. Docker no se admite para el perfil Elastic Cloud.
+El poller es parte obligatoria de la demo conjunta y de exceso de carga. Si falta, se conserva el
+bloqueo del diagnóstico antes de iniciar los escenarios o registrar pesajes; no se omite ese caso.
+`pollerMode: "disabled"` sigue siendo la configuración del panel **dentro del contenedor Compose**,
+que no monta el socket Docker. Ese modo informa que está deshabilitado, sin exigir SSH para Local.
+Para la demo completa local usar `npm start` o `npm run dev` en el host con `LOCAL_POLLER_MODE=docker`.
+Docker no se admite para el perfil Elastic Cloud.
+
+SSH utiliza `-F none`, la opción de [OpenSSH](https://man.openbsd.org/ssh#F) para ignorar los archivos
+de configuración del host sin depender de `/dev/null`. Las rutas de `known_hosts` se pasan entre
+comillas al parser de opciones de SSH; los comandos locales se ejecutan sin shell.
 
 SSH usa verificación estricta del gateway en `known_hosts`; registrar y comprobar previamente su clave
 desde una sesión de confianza. Los comandos remotos tienen argumentos fijos y escapados; los logs de
@@ -279,7 +325,8 @@ docker compose --profile demo up --build -d panel-simulador
 Preparar antes `.env.local` y `.local/profiles.json`. El Compose monta configuración de sólo lectura
 y un volumen de estado. Ejecuta el panel con UID 1000 por defecto para leer el archivo privado con
 permisos 600. Si el usuario del host tiene otro UID, definir `PANEL_UID` en el `.env` de los nodos.
-El Compose monta la privada y `known_hosts` de sólo lectura desde `/home/pis/.ssh` por defecto.
+El Compose monta la privada y `known_hosts` de sólo lectura desde la carpeta `.ssh` del usuario
+(`USERPROFILE` en Windows o `HOME` en Ubuntu) por defecto.
 Para otro host ajustar `PANEL_SSH_IDENTITY_FILE`, `PANEL_SSH_KNOWN_HOSTS_FILE` y `PANEL_UID`
 en `TSE_NODOS/.env` o el entorno de Compose. El panel usa las rutas internas `/app/ssh/identity`
 y `/app/ssh/known_hosts` para Elastic Cloud. No necesita socket Docker ni kubeconfig.
@@ -313,7 +360,9 @@ npm run lint
 npm run build
 ```
 
-Las pruebas levantan APIs HTTP falsas en localhost y un ejecutor SSH de prueba. Cubren
+Las pruebas levantan APIs HTTP falsas en localhost y ejecutores Docker/SSH de prueba lanzados
+con Node, sin shebangs ni permisos ejecutables Unix. Cubren rutas con espacios, arranque standalone,
+prioridad de perfiles/variables y cierre de procesos tras timeout o cancelación, además de
 los cuatro escenarios, evidencia vieja/futura, correlación exacta, exclusión mutua, cancelación,
 timeout, recuperación tras reinicio, fallo de restauración, bloqueo de carga sin poller,
 preparación/continuación, guía reciente, confirmación del tramo, configuración obsoleta, seguimiento de otro vehículo y ejecución concurrente con parada por GPS.

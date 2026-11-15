@@ -1,16 +1,18 @@
-import test from "node:test";
+import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { once } from "node:events";
+import childProcess from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
 import { start, stop, view } from "../src/lib/runner.ts";
 import { save, load, stateDir } from "../src/lib/store.ts";
 import { checkPoller, poller, PollerRunFailed } from "../src/lib/poller.ts";
 import { profile } from "../src/lib/config.ts";
 import { caseTypes } from "../src/lib/types.ts";
-const temp = fs.mkdtempSync(path.join(os.tmpdir(), "panel-test-"));
+const temp = fs.mkdtempSync(path.join(os.tmpdir(), "panel test con espacios-"));
 process.env.PANEL_STATE_DIR = path.join(temp, "state");
 process.env.PANEL_CONFIG_FILE = path.join(temp, "config.json");
 const originals = [
@@ -297,13 +299,20 @@ const server = http.createServer(async (req, res) => {
 });
 const bin = path.join(temp, "bin");
 fs.mkdirSync(bin);
-const oldPath = process.env.PATH;
-process.env.PATH = bin + path.delimiter + oldPath;
-const sshIdentityFile = path.join(temp, "identity");
-const sshKnownHostsFile = path.join(temp, "known_hosts");
+// Launch fixtures with Node, without Unix shebangs, chmod or Windows command shells.
+const realSpawn = childProcess.spawn;
+const spawnMock = mock.method(childProcess, "spawn", (binary, args, options) =>
+  ["ssh", "docker"].includes(binary)
+    ? realSpawn(process.execPath, [path.join(bin, binary + ".cjs"), ...args], options)
+    : realSpawn(binary, args, options));
+syncBuiltinESMExports();
+const composeFile = path.join(temp, "central compose.yml");
+fs.writeFileSync(composeFile, "services: {}\n");
+const sshIdentityFile = path.join(temp, "private identity");
+const sshKnownHostsFile = path.join(temp, "known hosts");
 fs.writeFileSync(sshIdentityFile, "test-key", { mode: 0o600 });
 fs.writeFileSync(sshKnownHostsFile, "test-host");
-const sshMock = "#!" + process.execPath + "\n" + `
+const sshMock = `
   const fs=require('fs'),path=require('path'),dir=${JSON.stringify(temp)},argv=process.argv.slice(2);
   fs.appendFileSync(path.join(dir,'sshcalls'),JSON.stringify(argv)+'\\n');
   const a=[...argv.at(-1).matchAll(/'([^']*)'/g)].map(m=>m[1]),verb=a[4],resource=a[5];
@@ -331,22 +340,25 @@ const sshMock = "#!" + process.execPath + "\n" + `
     fs.rmSync(path.join(dir,'remote-job'),{force:true});fs.rmSync(path.join(dir,'failed-job'),{force:true});
   }else process.exit(2);
 `;
-const dockerMock = "#!" + process.execPath + "\n" + `
+const dockerMock = `
   const fs=require('fs'),path=require('path'),dir=${JSON.stringify(temp)},a=process.argv.slice(2);
   fs.appendFileSync(path.join(dir,'dockercalls'),JSON.stringify(a)+'\\n');
   const has=name=>fs.existsSync(path.join(dir,name));
-  if(a[0]==='compose'&&a.includes('ps'))console.log(has('docker-incomplete')?'wildfly':'wildfly\\nmongodb');
+  if(a[0]==='compose'&&a.includes('config'))console.log(has('docker-no-poller')?'wildfly\\nmongodb':'wildfly\\nmongodb\\nfiscalizacionautomatica-poller');
+  else if(a[0]==='compose'&&a.includes('ps'))console.log(has('docker-incomplete')?'wildfly':'wildfly\\nmongodb');
   else if(a[0]==='ps'){if(has('docker-busy'))console.log('external-poller');}
   else if(a.includes('run')){
     fs.writeFileSync(path.join(dir,'local-job'),'yes');
     if(has('docker-fail'))process.exit(1);
     if(has('docker-wait'))setInterval(()=>{},1000);
+    else if(has('outage'))fetch(fs.readFileSync(path.join(dir,'outage'),'utf8')+'/api/scales/4/weighings')
+      .then(()=>{process.exitCode=1;});
     else fs.writeFileSync(path.join(dir,'polled'),'yes');
   }else if(a[0]==='rm')fs.rmSync(path.join(dir,'local-job'),{force:true});
   else process.exit(2);
 `;
 let base;
-async function waitFor(fn, ms = 5000) {
+async function waitFor(fn, ms = 15000) {
   const end = Date.now() + ms;
   while (Date.now() < end) {
     if (fn()) return;
@@ -374,6 +386,7 @@ function configure(extra = {}) {
         pollMs: 100,
         requestTimeoutMs: 1000,
         pollerMode: "ssh",
+        composeFile,
         sshHost: "gate.elasticloud.uy",
         sshUser: "6255-648",
         sshIdentityFile,
@@ -401,9 +414,9 @@ function reset() {
   outageId = outageUntil = null; rejectedWeighingQueries = weighingSubmissions = 0;
   fs.rmSync(process.env.PANEL_STATE_DIR, { recursive: true, force: true });
   fs.rmSync(path.join(temp, "polled"), { force: true });
-  for (const file of ["outage", "pollcalls", "poll-infra-failure", "sshcalls", "job-manifest.json", "remote-job", "deleted-job", "failed-job", "ssh-failure", "ssh-denied", "busy-job", "waiting-job", "disconnect-job", "dockercalls", "docker-incomplete", "docker-busy", "docker-fail", "docker-wait", "local-job"]) fs.rmSync(path.join(temp, file), { force: true });
-  fs.writeFileSync(path.join(bin, "ssh"), sshMock, { mode: 0o755 });
-  fs.writeFileSync(path.join(bin, "docker"), dockerMock, { mode: 0o755 });
+  for (const file of ["outage", "pollcalls", "poll-infra-failure", "sshcalls", "job-manifest.json", "remote-job", "deleted-job", "failed-job", "ssh-failure", "ssh-denied", "busy-job", "waiting-job", "disconnect-job", "dockercalls", "docker-incomplete", "docker-no-poller", "docker-busy", "docker-fail", "docker-wait", "local-job"]) fs.rmSync(path.join(temp, file), { force: true });
+  fs.writeFileSync(path.join(bin, "ssh.cjs"), sshMock);
+  fs.writeFileSync(path.join(bin, "docker.cjs"), dockerMock);
   configure();
 }
 test.before(async () => {
@@ -412,7 +425,8 @@ test.before(async () => {
   base = "http://127.0.0.1:" + server.address().port;
 });
 test.after(async () => {
-  process.env.PATH = oldPath;
+  spawnMock.mock.restore();
+  syncBuiltinESMExports();
   server.close();
   await once(server, "close");
   fs.rmSync(temp, { recursive: true, force: true });
@@ -644,17 +658,28 @@ test("reinicio conserva snapshot y exige restauración", async () => {
   assert.equal(load().status, "completado");
   assert.deepEqual(devices, originals);
 });
-test("carga sin poller falla antes de registrar el pesaje", async () => {
-  reset();
-  configure({ pollerMode: "disabled" });
-  start("local", "carga");
-  await waitFor(() => !view().running);
-  assert.equal(load().status, "fallido");
-  assert.equal(weighing, null);
-});
+for (const selection of ["diagnostico", "carga", "todos"]) {
+  test(`${selection} sin poller conserva el bloqueo con diagnóstico coherente y sin efectos`, async () => {
+    reset();
+    configure({ pollerMode: "disabled" });
+    start("local", selection);
+    await waitFor(() => !view().running);
+    assert.equal(load().status, "fallido");
+    assert.equal(weighingSubmissions, 0);
+    assert.equal(started, 0);
+    assert.deepEqual(devices, originals);
+    const check = load().checks.find(c => c.name === "Poller");
+    assert.equal(check.ok, false);
+    assert.match(check.message, /deshabilitado.*LOCAL_POLLER_MODE=docker/);
+    assert.doesNotMatch(check.message, /Falta configurar SSH/);
+    assert.equal(fs.existsSync(path.join(temp, "sshcalls")), false);
+    assert.equal(fs.existsSync(path.join(temp, "dockercalls")), false);
+    await assert.rejects(poller(profile("local"), new AbortController().signal, () => {}), /deshabilitado/);
+  });
+}
 test("Docker local comprueba Central, ejecuta el poller y limpia sin usar SSH", async () => {
   reset();
-  const p={...profile('local'),pollerMode:'docker',composeFile:path.join(temp,'central-compose.yml')};
+  const p={...profile('local'),pollerMode:'docker'};
   await checkPoller(p,new AbortController().signal);
   await poller(p,new AbortController().signal,()=>{});
   const calls=fs.readFileSync(path.join(temp,'dockercalls'),'utf8').trim().split('\n').map(JSON.parse);
@@ -674,11 +699,50 @@ test("Docker local rechaza servicios incompletos u otro poller activo", async ()
   await assert.rejects(poller(p,new AbortController().signal,()=>{}),/Ya hay un poller/);
   assert.equal(fs.existsSync(path.join(temp,'local-job')),false);
 });
+test("Compose ausente o sin servicio poller bloquea la demo antes de modificar GPS o pesar", async () => {
+  for (const absent of [true, false]) {
+    reset();
+    configure({ pollerMode: "docker", ...(absent ? { composeFile: path.join(temp, "missing.yml") } : {}) });
+    if (!absent) fs.writeFileSync(path.join(temp, "docker-no-poller"), "yes");
+    start("local", "todos");
+    await waitFor(() => !view().running);
+    assert.equal(load().status, "fallido");
+    const check = load().checks.find(c => c.name === "Poller");
+    assert.equal(check.ok, false);
+    assert.match(check.message, /LOCAL_COMPOSE_FILE/);
+    assert.equal(started, 0);
+    assert.equal(weighingSubmissions, 0);
+    assert.deepEqual(devices, originals);
+  }
+});
+test("carga local usa Docker y confirma el único pesaje en Central", async () => {
+  reset(); configure({ pollerMode: "docker" });
+  start("local", "carga");
+  await waitFor(() => !view().running);
+  assert.equal(load().status, "completado", JSON.stringify(load()));
+  assert.equal(load().steps[0].status, "detectado");
+  assert.equal(weighingSubmissions, 1);
+  assert.equal(fs.existsSync(path.join(temp, "sshcalls")), false);
+  assert.equal(fs.existsSync(path.join(temp, "local-job")), false);
+});
+test("503 del poller Docker conserva el pesaje y cancelar recupera Balanzas", async () => {
+  reset(); configure({ pollerMode: "docker" });
+  start("local", "carga", true);
+  await waitFor(() => load()?.resilience?.failedPollVerified);
+  assert.equal(unavailable, true);
+  assert.equal(weighingSubmissions, 1);
+  assert.equal(fs.existsSync(path.join(temp, "local-job")), false);
+  stop(); await waitFor(() => !view().running);
+  assert.equal(load().status, "cancelado");
+  assert.equal(load().cleanupRequired, false);
+  assert.equal(unavailable, false);
+  assert.equal(weighingSubmissions, 1);
+});
 test("fallo, timeout y cancelación del poller Docker limpian sólo su contenedor", async () => {
   for(const reason of ['fail','timeout','abort']){
     reset();fs.writeFileSync(path.join(temp,reason==='fail'?'docker-fail':'docker-wait'),'yes');
     const controller=new AbortController();
-    const promise=poller({...profile('local'),pollerMode:'docker',pollerTimeoutMs:150},controller.signal,()=>{});
+    const promise=poller({...profile('local'),pollerMode:'docker',pollerTimeoutMs:1500},controller.signal,()=>{});
     if(reason==='abort'){await waitFor(()=>fs.existsSync(path.join(temp,'local-job')));controller.abort();}
     await assert.rejects(promise,e=>reason==='fail'?e instanceof PollerRunFailed:!(e instanceof PollerRunFailed));
     assert.equal(fs.existsSync(path.join(temp,'local-job')),false);
@@ -692,6 +756,9 @@ test("SSH usa el nodo directo, crea el Job por stdin y limpia sólo ese Job", as
   const calls = fs.readFileSync(path.join(temp, "sshcalls"), "utf8").trim().split("\n").map(JSON.parse);
   assert.ok(calls.every(a => a.includes("6255-648@gate.elasticloud.uy") && a[a.indexOf("-p") + 1] === "3022"));
   assert.ok(calls.every(a => a.includes("-T") && a.includes("BatchMode=yes") && a.includes("StrictHostKeyChecking=yes")));
+  assert.ok(calls.every(a => a[a.indexOf("-F") + 1] === "none"));
+  const knownHosts = process.platform === "win32" ? sshKnownHostsFile.replace(/\\/g, "/") : sshKnownHostsFile;
+  assert.ok(calls.every(a => a.includes("UserKnownHostsFile=" + JSON.stringify(knownHosts))));
   assert.ok(calls.every(a => a[a.indexOf("-i") + 1] === sshIdentityFile));
   assert.ok(calls.some(a => a.at(-1).includes("'create' '-f' '-'")));
   const manifest = JSON.parse(fs.readFileSync(path.join(temp, "job-manifest.json"), "utf8"));
@@ -734,7 +801,7 @@ test("timeout, cancelación y desconexión SSH limpian el Job sin confundirse co
   for(const reason of ['timeout','abort','disconnect']) {
     reset(); fs.writeFileSync(path.join(temp,reason==='disconnect'?'disconnect-job':'waiting-job'),'yes');
     const controller=new AbortController();
-    const promise=poller({...profile('local'),pollerTimeoutMs:250},controller.signal,()=>{});
+    const promise=poller({...profile('local'),pollerTimeoutMs:1500},controller.signal,()=>{});
     if(reason==='abort') { await waitFor(()=>fs.existsSync(path.join(temp,'remote-job'))); controller.abort(); }
     await assert.rejects(promise,e=>!(e instanceof PollerRunFailed));
     assert.equal(fs.existsSync(path.join(temp,'remote-job')),false);

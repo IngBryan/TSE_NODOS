@@ -79,12 +79,12 @@ services:
       - ./panel-simulador/.local/profiles.json:/app/config/profiles.json:ro
       - panel-simulador-state:/app/data
       - type: bind
-        source: ${PANEL_SSH_IDENTITY_FILE:-/home/pis/.ssh/ale_id_ed25519}
+        source: ${PANEL_SSH_IDENTITY_FILE:-${USERPROFILE:-${HOME}}/.ssh/ale_id_ed25519}
         target: /app/ssh/identity
         read_only: true
         bind: {create_host_path: false}
       - type: bind
-        source: ${PANEL_SSH_KNOWN_HOSTS_FILE:-/home/pis/.ssh/known_hosts}
+        source: ${PANEL_SSH_KNOWN_HOSTS_FILE:-${USERPROFILE:-${HOME}}/.ssh/known_hosts}
         target: /app/ssh/known_hosts
         read_only: true
         bind: {create_host_path: false}
