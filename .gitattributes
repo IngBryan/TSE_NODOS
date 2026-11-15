@@ -1,0 +1,2 @@
+# Conservar LF en los scripts ejecutados con Bash, también en Windows.
+*.sh text eol=lf

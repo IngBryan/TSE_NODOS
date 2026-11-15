@@ -52,6 +52,7 @@ let devices = structuredClone(originals),
   weighingSubmissions = 0,
   oldBalanzas = false,
   failAvailabilityRestore = false;
+let configuredThresholds = [], echoDeviationThreshold = true;
 const line = {
   type: "LineString",
   coordinates: [
@@ -179,11 +180,13 @@ const server = http.createServer(async (req, res) => {
         ? devices.filter((d) => d.active)
         : devices;
   else if (/^\/api\/gps-devices\/\d+\/scenario$/.test(url.pathname)) {
+    if (body.scenario === "DESVIO") configuredThresholds.push(body.deviationThresholdMeters);
     configGps = Number(url.pathname.split("/")[3]);
     if (scopedMode || prepared) scoped.set(configGps, {
       gpsId: configGps, configurationId: "configured-id", emittedPoints: 0, confirmedPoints: 0, pendingMessages: 0, running: false,
     });
     data = { configuration: { gpsId: configGps, configurationId: "configured-id",
+      deviationThresholdMeters: echoDeviationThreshold ? body.deviationThresholdMeters : undefined,
       preparation: { stopAtMeters: 222, durationSeconds: 10, expectedPoints: 3 },
     } };
   } else if (/^\/api\/gps-devices\/\d+$/.test(url.pathname)) {
@@ -416,6 +419,8 @@ function reset() {
   scopedMode = false; scoped = new Map(); scopedEvents = new Map(); requestedFactors = [];
   weighingGps = []; failWeighing = false; missingHistoricalEnd = false;
   unavailable = oldBalanzas = failAvailabilityRestore = false;
+  configuredThresholds = [];
+  echoDeviationThreshold = true;
   outageId = outageUntil = null; rejectedWeighingQueries = weighingSubmissions = 0;
   fs.rmSync(process.env.PANEL_STATE_DIR, { recursive: true, force: true });
   fs.rmSync(path.join(temp, "polled"), { force: true });
@@ -840,12 +845,13 @@ test("timeout, cancelación y desconexión SSH limpian el Job sin confundirse co
 test("preparar pausa sin caso; detectar mantiene GPS activo hasta la parada manual", async () => {
   reset();
   configure({ pollerMode: "disabled" });
-  start("local", "preparar_desvio");
+  start("local", "preparar_desvio", false, 750);
   await waitFor(() => !view().running);
   const ready = load();
   assert.equal(ready.status, "completado", JSON.stringify(ready));
   assert.equal(ready.prepared.expectedPoints, 3);
   assert.equal(ready.factor, 20);
+  assert.equal(ready.deviationThresholdMeters, 750);
   assert.equal(ready.cleanupRequired, true);
   assert.equal(tracking, false);
   assert.equal(liveDetour, false);
@@ -863,6 +869,7 @@ test("preparar pausa sin caso; detectar mantiene GPS activo hasta la parada manu
   const completed = load();
   assert.equal(completed.status, "completado", JSON.stringify(completed));
   assert.equal(completed.factor, 1);
+  assert.equal(completed.deviationThresholdMeters, 750);
   assert.equal(completed.steps[0].caseId, 4);
   assert.equal(completed.prepared, undefined);
   assert.equal(completed.cleanupRequired, false);
@@ -874,6 +881,40 @@ test("preparar pausa sin caso; detectar mantiene GPS activo hasta la parada manu
   assert.match(load().message, /ya tiene un caso/);
   assert.equal(started, before);
 });
+test("envía a Tracking el umbral ingresado al preparar cada desvío", async () => {
+  for (const threshold of [500, 3500]) {
+    reset();
+    configure({ pollerMode: "disabled" });
+    start("local", "preparar_desvio", false, threshold);
+    await waitFor(() => !view().running);
+    assert.equal(load().status, "completado", JSON.stringify(load()));
+    assert.deepEqual(configuredThresholds, [threshold]);
+    assert.equal(load().deviationThresholdMeters, threshold);
+  }
+});
+
+test("rechaza umbrales inválidos antes de configurar o publicar", () => {
+  for (const value of [null, 0, 10001, "500", 1.5, NaN]) {
+    reset();
+    assert.throws(() => start("local", "preparar_desvio", false, value), /umbral/i);
+    assert.deepEqual(configuredThresholds, []);
+    assert.deepEqual(requestedFactors, []);
+    assert.deepEqual(devices, originals);
+    assert.equal(view().running, false);
+  }
+});
+
+test("un Tracking anterior que ignora el umbral bloquea la publicación", async () => {
+  reset(); echoDeviationThreshold = false;
+  configure({ pollerMode: "disabled" });
+  start("local", "preparar_desvio");
+  await waitFor(() => !view().running);
+  assert.equal(load().status, "fallido");
+  assert.match(load().message, /no confirmó el umbral/);
+  assert.deepEqual(requestedFactors, []);
+  assert.deepEqual(devices, originals);
+});
+
 test("guía reciente bloquea la preparación antes de publicar", async () => {
   reset(); recentGuide = true;
   start("local", "preparar_desvio");

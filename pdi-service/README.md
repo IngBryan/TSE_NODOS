@@ -1,61 +1,99 @@
-# pdi-service — PDI simulada (Servicio de Información DNIC)
+# carga.uy — PDI simulada (Servicio de Información DNIC)
 
-Simula el Servicio de Información de DNIC que consume carga.uy por la PDI (CU-03 y CU-04). Todo es SOAP.
+Servicio Spring Boot que responde consultas SOAP de datos de ciudadanos.
+Central utiliza la información para validar su existencia y mayoría de edad.
+El cálculo de edad pertenece a Central.
 
-| Servicio | Endpoint | WSDL | Seguridad |
-|---|---|---|---|
-| DNIC (contrato original) | `POST /ws/servicioInformacion` | `/ws/servicioInformacion.wsdl` | WS-Addressing + WS-Security (ver abajo) |
-| Administración | `POST /ws/admin` | `/ws/admin.wsdl` | HTTP Basic (`PDI_ADMIN_USER` / `PDI_ADMIN_PASSWORD`) |
+## Arranque y configuración
 
-Observabilidad: `/actuator/health`, `/actuator/prometheus` (métrica `pdi_consultas_total{resultado}`), logs JSON (ECS) con `correlationId` tomado del header `X-Correlation-Id`.
-
-## Levantar
-
-Con Docker se levanta desde el `docker-compose.yml` de la raíz de `TSE_NODOS` (servicio `pdi`, en `http://localhost:3005`), junto con los demás nodos. Las variables `PDI_*` se definen en el `.env` de la raíz o las pasa el CI/CD (ver el README de la raíz).
+El arranque completo se documenta en el [README principal](../README.md).
+Para levantar únicamente la PDI, desde la raíz de TSE_NODOS:
 
 ```bash
-cd ..
-docker compose up --build pdi
+docker compose up -d --build pdi
 ```
 
-Local sin Docker: Java 21 y `./mvnw spring-boot:run` (con las variables de `.env.example` exportadas). Tests: `./mvnw verify`.
+Dirección local: http://localhost:3005. Configurar `PDI_*` en el `.env`
+de TSE_NODOS, usando como referencia su `.env.example`.
 
-Base de datos: H2 en memoria (`jdbc:h2:mem:pdi`), no hace falta levantar nada aparte. Los datos se pierden al reiniciar: Flyway vuelve a crear el esquema y las personas de prueba. Se puede cambiar con `PDI_DB_URL` (p. ej. `jdbc:h2:file:./data/pdi` para persistir en disco).
+- `PDI_ADMIN_USER` y `PDI_ADMIN_PASSWORD`: acceso administrativo.
+- `PDI_ORGANISMO_CODIGO` y `PDI_ORGANISMO_CLAVE`: mismos valores que Central.
+- `PDI_ORGANISMO_NOMBRE`: nombre del organismo inicial.
+- `PDI_SIMULACION_MODO`: NORMAL, LENTO o CAIDO.
+- `PDI_SIMULACION_LATENCIA_MS`: demora aplicada en modo LENTO.
+- `PDI_WSS_TIMESTAMP_TTL_SEGUNDOS`: vigencia máxima del Timestamp; 300 por defecto.
 
-## WS-Addressing y WS-Security (servicio DNIC)
+## Servicios SOAP
 
-Todo request DNIC debe traer en el `soapenv:Header`:
+| Servicio | Endpoint | WSDL | Autenticación |
+|---|---|---|---|
+| DNIC | `/ws/servicioInformacion` | `/ws/servicioInformacion.wsdl` | WS-Addressing y WS-Security |
+| Administración | `/ws/admin` | `/ws/admin.wsdl` | HTTP Basic |
 
-- **WS-Addressing 1.0** (`http://www.w3.org/2005/08/addressing`): `wsa:Action` (`http://wsServicioDeInformacion/obtDocDigitalizado` o `.../ProductDesc`), `wsa:MessageID` (p. ej. `urn:uuid:...`) y `wsa:To`. La respuesta trae `wsa:Action` (`...Response`), su propio `wsa:MessageID` y `wsa:RelatesTo` = el MessageID del request. El MessageID se loguea como `wsaMessageId`.
-- **WS-Security** (`wsse:Security`): `wsu:Timestamp` vigente (máx. `PDI_WSS_TIMESTAMP_TTL_SEGUNDOS`, 300 por defecto) y `wsse:UsernameToken` con Username = código del organismo y Password tipo **PasswordText** = su clave (se compara contra el hash BCrypt; PasswordDigest no se admite). La confidencialidad de la clave la da HTTPS.
+El servicio DNIC ofrece `obtDocDigitalizado` y `ProductDesc`.
+El documento acepta formato continuo o con puntos y guion; el tipo es `DO`.
+La respuesta incluye nombres, apellidos, fecha de nacimiento, sexo,
+nacionalidad y documento; no devuelve imágenes.
+`idSolicitud` se conserva y `idRespuesta` identifica el registro de consulta.
 
-Si falta algo, se responde un SOAP Fault: `WS-Addressing requerido...`, `No WS-Security header found`, `The security token could not be authenticated or authorized`, `Invalid timestamp...`.
+## Cabeceras y seguridad
 
-Los campos `Organismo` y `ClaveAcceso1` del Body siguen en el WSDL (es el contrato DNIC) pero **se ignoran**: el organismo que se registra en la consulta es el del UsernameToken.
+Cada solicitud DNIC debe incluir:
 
-En SoapUI: pestaña **WS-A** → *Enable WS-A addressing*, *Add default wsa:Action*, *Generate MessageID*; en **Auth** (o *Outgoing WS-Security Configurations* del proyecto) → Username + Password, tipo *PasswordText*, y agregar un Timestamp.
+- WS-Addressing 1.0: `wsa:Action`, `wsa:MessageID` y `wsa:To`.
+- WS-Security: `wsu:Timestamp` vigente y `wsse:UsernameToken` con el código
+  del organismo y su clave mediante `PasswordText`. No se admite PasswordDigest.
 
-## obtDocDigitalizado
+Acciones: `http://wsServicioDeInformacion/obtDocDigitalizado` y
+`http://wsServicioDeInformacion/ProductDesc`. La respuesta incluye su propio
+MessageID y `RelatesTo` con el identificador de la solicitud.
+Los campos `Organismo` y `ClaveAcceso1` del cuerpo se conservan por compatibilidad,
+pero la autenticación se realiza con el UsernameToken. En acceso remoto,
+HTTPS protege el transporte de la clave.
 
-- Se completan solo `Nombre1`, `Nombre2`, `primerApellido`, `segundoApellido`, `FechaNacimiento` (`yyyy-MM-dd`), `sexo`, `CodNacionalidad`, `NombreEnCedula`, `NroDocumento` y `CodTipoDocumento` (`DO`). `Imagenes` va vacío.
-- `Nrodocumento` acepta `12345678` o `1.234.567-8`. `TipoDocumento` vacío o `DO`.
-- `idSolicitud` se devuelve tal cual; `idRespuesta` es el id del registro de la consulta.
-- La edad **no** se calcula acá: la calcula el componente central.
+En SoapUI, habilitar WS-Addressing, generar MessageID y Action y configurar
+UsernameToken con PasswordText y Timestamp.
 
-Errores (en `Errores/Mensaje/CodMensaje`, respuesta HTTP 200):
+Los errores de cabeceras, credenciales y administración se devuelven como SOAP Fault.
+Los errores de negocio de DNIC se devuelven dentro de `Errores/Mensaje/CodMensaje`
+con HTTP 200: 1001 persona inexistente o dada de baja, 3001 documento inválido,
+3002 tipo de documento no soportado.
 
-| Código | Significado | CU-03 |
-|---|---|---|
-| 1001 | Persona no encontrada (o dada de baja) | NO_EXISTE |
-| 3001 | Documento inválido | error |
-| 3002 | Tipo de documento no soportado | error |
+## Administración y fallas
 
-## Administración
+La API administrativa permite alta, modificación, consulta y baja lógica de personas;
+alta y baja de organismos; y `ConfigurarSimulacion` / `ConsultarSimulacion`.
 
-`AltaPersona`, `ModificarPersona`, `ConsultarPersona`, `BajaPersona` (lógica), `AltaOrganismo`, `BajaOrganismo`, `ConfigurarSimulacion`, `ConsultarSimulacion`. Los errores vuelven como SOAP Fault.
+- NORMAL: respuesta habitual.
+- LENTO: demora `latenciaMs`; permite provocar el timeout de Central.
+- CAIDO: SOAP Fault inmediato.
 
-**Simulación de fallas** (escenario "la PDI no responde"): `ConfigurarSimulacion` con `modo` = `NORMAL`, `LENTO` (+ `latenciaMs`, para provocar el timeout del central) o `CAIDO` (SOAP Fault inmediato). Solo afecta a DNIC, nunca a la administración. Vive en memoria (vuelve a `PDI_SIMULACION_MODO` al reiniciar).
+La simulación afecta únicamente a DNIC. Administración permanece accesible.
+Al reiniciar se vuelve al modo definido por las variables de entorno.
 
-## Datos de prueba (ficticios)
+## Datos de prueba y observabilidad
 
-`11111111`, `22222222`, `77777777` mayores · `33333333` 16 años · `44444444` cumple 18 el día de la migración · `55555555` cumple 18 al día siguiente · `66666666` dado de baja. Personas del equipo (V3): `54074380` Emiliano Tomas Martinez `56087406` Bryan Salamone Varela y `48060995` Alejandro Orellano Prantl, mayores. El organismo se crea al arrancar desde `PDI_ORGANISMO_CODIGO` / `PDI_ORGANISMO_CLAVE` (clave guardada con BCrypt).
+La PDI utiliza una base H2 en memoria. Al reiniciar, se restablecen las tablas
+y los datos de prueba mediante Flyway.
+
+Datos ficticios: `11111111`, `22222222` y `77777777` mayores; `33333333` menor;
+`44444444` cumple 18 el día de la migración; `55555555`, al día siguiente;
+`66666666`, dado de baja. La migración V3 agrega los registros del equipo.
+
+Estado: `/actuator/health`. Métricas: `/actuator/prometheus`, incluida
+`pdi_consultas_total{resultado}`. Logs JSON con `correlationId` tomado de
+`X-Correlation-Id` y `wsaMessageId` para las solicitudes SOAP.
+
+## Desarrollo y pruebas
+
+Requiere Java 21. Exportar las variables `PDI_*` necesarias antes de ejecutar;
+Maven no carga automáticamente el `.env` del repositorio.
+Desde esta carpeta, en Bash:
+
+```bash
+bash ./mvnw spring-boot:run
+bash ./mvnw verify
+```
+
+En PowerShell, usar `.\mvnw.cmd spring-boot:run` o `.\mvnw.cmd verify`.
+Sin Docker, el puerto predeterminado es 8080 y puede ajustarse mediante `PORT`.

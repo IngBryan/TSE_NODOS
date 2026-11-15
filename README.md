@@ -1,101 +1,76 @@
-# TSE Nodos
+# carga.uy — Nodos periféricos
 
-Nodos perifericos del laboratorio. Son componentes standalone (Next.js y Spring Boot) que se despliegan
-**aparte** del componente central (`TSE_CENTRAL`) y se comunican con el.
+Simuladores de Tracking, Balanzas y PDI de carga.uy, ejecutados
+por separado del componente central.
 
-```
-TSE_NODOS/
-├── tracking/            # Mock de GPS: publica posiciones en el RabbitMQ del componente central
-├── balanzas/            # Mock de balanzas: API consumida por el componente central (OAuth2)
-├── panel-simulador/     # Panel Next.js: coordina escenarios GPS/carga y verifica evidencia
-├── pdi-service/         # PDI simulada (Servicio de Informacion DNIC, SOAP, Spring Boot)
-├── docker-compose.yml   # Levanta tracking, balanzas y pdi
-└── .env                 # Credenciales (ignorado por git)
-```
+- Tracking publica posiciones GPS en el RabbitMQ de Central.
+- Balanzas ofrece consultas de pesajes mediante REST y OAuth2.
+- PDI simula el servicio DNIC mediante SOAP y WS-Security.
 
-Cada app tiene su propio README con la API y las variables de entorno. `tracking` y `balanzas` exponen
-`GET /api/health`; `pdi` expone `GET /actuator/health`.
+## Requisitos y configuración
 
-## Docker
+- Docker con Docker Compose 2.30 o superior.
+- En Windows: Docker Desktop iniciado con contenedores Linux y
+  Git for Windows instalado.
+- En Linux/macOS: Bash y Docker iniciado.
+
+Antes del primer arranque, copiar `.env.example` a `.env` y completar
+los valores vacíos siguiendo los comentarios de la plantilla.
+
+Parámetros principales:
+
+- `RABBITMQ_USER` y `RABBITMQ_PASSWORD`: mismos valores que en Central.
+  Conservar `RABBITMQ_HOST=host.docker.internal` para ejecución local.
+- `BALANZAS_OAUTH_CLIENT_ID` y `BALANZAS_OAUTH_CLIENT_SECRET`:
+  deben coincidir con las credenciales de Balanzas usadas por Central.
+- `TRACKING_OAUTH_CLIENT_ID` y `TRACKING_OAUTH_CLIENT_SECRET`:
+  credenciales para administrar el simulador GPS.
+- `BALANZAS_JWT_SECRET` y `TRACKING_JWT_SECRET`: claves distintas,
+  de al menos 32 caracteres.
+- `PDI_ORGANISMO_CODIGO` y `PDI_ORGANISMO_CLAVE`: mismos valores
+  que en Central; la clave debe tener al menos 12 caracteres.
+- `PDI_ADMIN_PASSWORD`: contraseña administrativa de la PDI.
+
+## Arranque local
+
+Desde la raíz de este repositorio:
+
+**Linux/macOS o Git Bash en Windows:**
 
 ```bash
-docker compose up --build
+bash iniciar.sh
 ```
 
-| Servicio   | URL                   |
-|------------|------------------------|
-| `tracking` | http://localhost:3000  |
-| `balanzas` | http://localhost:3001  |
-| `pdi`      | http://localhost:3005  |
+**PowerShell en Windows**, con Git instalado en su ubicación habitual:
 
-### Variables de entorno (`TSE_NODOS/.env`)
-
-Cada variable lleva el prefijo del servicio y el compose la mapea al nombre que lee la app
-(ej. `BALANZAS_JWT_SECRET` → `JWT_SECRET` en el contenedor de `balanzas`).
-
-```bash
-#Balanzas
-BALANZAS_OAUTH_CLIENT_ID=componente-central
-BALANZAS_OAUTH_CLIENT_SECRET=<un-secreto>
-BALANZAS_JWT_SECRET=<minimo-32-caracteres>
-BALANZAS_OAUTH_TOKEN_TTL_SECONDS=3600
-
-#Tracking
-TRACKING_OAUTH_CLIENT_ID=tracking-admin
-TRACKING_OAUTH_CLIENT_SECRET=<otro-secreto>
-TRACKING_JWT_SECRET=<otro-minimo-32-caracteres>
-TRACKING_OAUTH_TOKEN_TTL_SECONDS=3600
-#TRACKING_INTERVAL_SECONDS=5   # opcional: cada cuanto reporta cada GPS
-#TRACKING_SPEED_KMH=80         # opcional: velocidad simulada sobre geometria real
-
-#RabbitMQ del componente central (credenciales con las que tracking publica)
-RABBITMQ_USER=<mismo-que-en-TSE_CENTRAL>
-RABBITMQ_PASSWORD=<mismo-que-en-TSE_CENTRAL>
-#RABBITMQ_HOST=host.docker.internal   # opcional: donde corre el componente central
-#RABBITMQ_PORT=5672                   # opcional
-
-#PDI (las lee la app con este mismo nombre, sin remapeo)
-PDI_ADMIN_USER=admin
-PDI_ADMIN_PASSWORD=<un-secreto>                      # obligatorio: sin esto el contenedor pdi no arranca
-PDI_ORGANISMO_CODIGO=MTOP-CARGA                      # usuario del wsse:UsernameToken que manda el central
-PDI_ORGANISMO_CLAVE=<minimo-12-caracteres>          # password (PasswordText) del UsernameToken
-#PDI_ORGANISMO_NOMBRE=MTOP - carga.uy               # opcional
-#PDI_SIMULACION_MODO=NORMAL                         # opcional: NORMAL | LENTO | CAIDO
-#PDI_SIMULACION_LATENCIA_MS=0                       # opcional (modo LENTO)
-#PDI_WSS_TIMESTAMP_TTL_SEGUNDOS=300                 # opcional: vigencia máxima del wsu:Timestamp
+```powershell
+& "C:\Program Files\Git\bin\bash.exe" ./iniciar.sh
 ```
 
-Usar secretos distintos por servicio. Los valores se inyectan al crear el contenedor: si se
-cambian, correr `docker compose up -d` (no alcanza con `restart`).
+El script compila las imágenes y levanta únicamente Tracking, Balanzas y PDI.
 
-### Conexion con el componente central
+| Servicio | Verificación de estado |
+|---|---|
+| Tracking | http://localhost:3000/api/health |
+| Balanzas | http://localhost:3001/api/health |
+| PDI | http://localhost:3005/actuator/health |
 
-`tracking` no comparte compose ni red con `TSE_CENTRAL`: llega al RabbitMQ del central por
-red, igual que lo haria un nodo remoto. `RABBITMQ_HOST` por defecto es `host.docker.internal`
-(el puerto `5672` que publica el compose de `TSE_CENTRAL` en la misma maquina). Para apuntar
-a otra maquina, definir `RABBITMQ_HOST` en el `.env`.
+## Opciones y demostración
 
-- `RABBITMQ_USER` / `RABBITMQ_PASSWORD` deben coincidir con los del `.env` de `TSE_CENTRAL`.
-- No hay `depends_on`: tracking puede arrancar antes que RabbitMQ; la publicacion reintenta
-  en orden hasta que el broker este disponible.
+Tracking comienza desactivado y se habilita mediante su API o el panel.
+`TRACKING_INTERVAL_SECONDS` define el intervalo GPS: 5 segundos por defecto.
+`PDI_SIMULACION_MODO` admite `NORMAL`, `LENTO` y `CAIDO`.
 
-## Requisitos
+El [panel simulador](panel-simulador/README.md) es una herramienta auxiliar.
+Se inicia aparte con Node.js 24 y configuración propia. Permite preparar
+escenarios, simular fallas y solicitar ejecuciones manuales del poller
+de Balanzas de Central.
 
-- Node.js 24 / npm (para desarrollo local)
-- Docker + Docker Compose
+Los datos de los simuladores se almacenan en memoria y se restablecen
+al reiniciar.
 
-## Panel operativo de demostración
+Estado: `docker compose ps`. Logs: `docker compose logs -f`.
+Detener los nodos: `docker compose down`.
 
-Aplicación independiente en [`panel-simulador/`](panel-simulador/README.md), junto a Tracking,
-Balanzas y PDI. Permite ejecutar los cuatro escenarios, comprobar el ambiente, inspeccionar evidencia
-nueva y detener/restaurar GPS. Se ejecuta con Node.js 24 en la PC, tanto en Ubuntu como en Windows.
-Las credenciales sólo se usan en el servidor. El panel no crea casos directamente en Central.
-
-Preparar su configuración privada como indica el README y ejecutar `npm run dev` desde
-`panel-simulador/`, o `npm run build` y `npm start` para usar la compilación de producción.
-En el ambiente **Local**, Docker Compose levanta los nodos y Central; el panel lanza el poller local
-mediante Docker. En **Elastic Cloud**, el panel consulta las APIs remotas y ejecuta el poller a demanda
-por SSH al nodo del Central; la privada y `known_hosts` se leen en la PC. Central y los nodos son los
-componentes desplegados en cloud.
-Tracking mide cada **5 segundos** por defecto; un despliegue con una variable explícita distinta
-necesita actualizarla y recrear su contenedor.
+Contratos y opciones: [Tracking](tracking/README.md),
+[Balanzas](balanzas/README.md) y [PDI](pdi-service/README.md).

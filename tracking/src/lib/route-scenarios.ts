@@ -10,11 +10,12 @@ export interface DeviceScenarioConfig {
   authorizedRoutes: LineString[];
   /** Optional OSRM driving route through a detour waypoint, never an authorized line. */
   deviationRoute?: LineString;
+  /** Distance threshold supplied by the operator when configuring a detour. */
+  deviationThresholdMeters?: number;
 }
 
 const MAX_COORDINATES = 20_000;
 const MIN_LENGTH_METERS = 100;
-const MIN_DEVIATION_METERS = 2_000;
 
 export class InvalidScenario extends Error {}
 
@@ -50,6 +51,17 @@ export function parseScenarioConfig(value: unknown): DeviceScenarioConfig {
   if (!isTrackingScenario(data.scenario)) {
     throw new InvalidScenario("scenario must be NORMAL_A or DESVIO");
   }
+  let deviationThresholdMeters: number | undefined;
+  if (data.deviationThresholdMeters !== undefined) {
+    const threshold = data.deviationThresholdMeters;
+    if (typeof threshold !== "number" || !Number.isInteger(threshold) || threshold < 1 || threshold > 10_000) {
+      throw new InvalidScenario("deviationThresholdMeters must be an integer between 1 and 10000 metres");
+    }
+    deviationThresholdMeters = threshold;
+  }
+  if (data.scenario === "DESVIO" && deviationThresholdMeters === undefined) {
+    throw new InvalidScenario("DESVIO requires deviationThresholdMeters");
+  }
   if (!Array.isArray(data.authorizedRoutes) || data.authorizedRoutes.length !== 1) {
     throw new InvalidScenario("authorizedRoutes must contain exactly one authorized GeoJSON line (A)");
   }
@@ -77,11 +89,11 @@ export function parseScenarioConfig(value: unknown): DeviceScenarioConfig {
       const offset = Math.min(...authorizedRoutes.map((route) => distanceToRouteMeters(point, route)));
       maximumOffset = Math.max(maximumOffset, offset);
     }
-    if (maximumOffset < MIN_DEVIATION_METERS) {
-      throw new InvalidScenario("deviationRoute must leave all authorized routes by at least 2 km");
+    if (deviationThresholdMeters !== undefined && maximumOffset <= deviationThresholdMeters) {
+      throw new InvalidScenario(`deviationRoute must exceed the threshold of ${deviationThresholdMeters} metres`);
     }
   }
-  return { scenario: data.scenario, authorizedRoutes, deviationRoute };
+  return { scenario: data.scenario, authorizedRoutes, deviationRoute, deviationThresholdMeters };
 }
 
 export function isTrackingScenario(value: unknown): value is TrackingScenario {

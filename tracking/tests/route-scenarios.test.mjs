@@ -8,7 +8,7 @@ const B = {type: 'LineString', coordinates: [[-58, -33], [-58.02, -33.1], [-58, 
 const DETOUR = {type: 'LineString', coordinates: [[-58, -33], [-58.08, -33.1], [-58, -33.2]]};
 
 function config(scenario, authorizedRoutes = [A], deviationRoute = DETOUR) {
-  return {scenario, authorizedRoutes, deviationRoute};
+  return {scenario, authorizedRoutes, deviationRoute, deviationThresholdMeters: 2000};
 }
 
 test('distance is metric on the globe and interpolation follows accumulated length', () => {
@@ -58,4 +58,22 @@ test('configuration clones data, no mutable aliasing with HTTP input', () => {
   input.authorizedRoutes[0].coordinates[0][0] = -99;
   assert.equal(parsed.authorizedRoutes[0].coordinates[0][0], -58);
   assert.ok(distanceMeters(A.coordinates[0], A.coordinates[1]) > 20_000); // A unaffected except previous input edit?
+});
+
+test('uses the supplied threshold for detours below and above the old 2 km limit', () => {
+  assert.throws(() => parseScenarioConfig(config('DESVIO', [A], B)), InvalidScenario);
+  const smallDetour = parseScenarioConfig({ ...config('DESVIO', [A], B), deviationThresholdMeters: 500 });
+  assert.equal(smallDetour.deviationThresholdMeters, 500);
+  assert.deepEqual(selectedRoute(smallDetour), B);
+  assert.throws(() => parseScenarioConfig({ ...config('DESVIO'), deviationThresholdMeters: 9000 }),
+    /threshold of 9000/);
+});
+
+test('requires a valid threshold for DESVIO and never falls back to 2 km', () => {
+  for (const threshold of [undefined, null, '500', 0, -1, 1.5, 10001, Infinity, NaN]) {
+    assert.throws(() => parseScenarioConfig({ ...config('DESVIO'), deviationThresholdMeters: threshold }),
+      InvalidScenario);
+  }
+  assert.doesNotThrow(() => parseScenarioConfig({ scenario: 'NORMAL_A', authorizedRoutes: [A] }));
+  assert.doesNotThrow(() => parseScenarioConfig({ ...config('DESVIO'), deviationThresholdMeters: 1 }));
 });

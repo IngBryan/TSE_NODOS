@@ -101,6 +101,7 @@ export function getDeviceScenario(gpsId: number) {
   return {
     gpsId,
     scenario: run.config.scenario,
+    deviationThresholdMeters: run.config.deviationThresholdMeters,
     configurationId: run.configurationId,
     preparation: run.preparation,
     lastReportedMeters: run.lastReportedMeters ?? null,

@@ -6,6 +6,10 @@ export const scenarios = [
 ] as const;
 export type Scenario = (typeof scenarios)[number];
 export type Target = "local" | "elasticcloud";
+export const DEFAULT_DEVIATION_THRESHOLD_METERS = 2000;
+export function validDeviationThreshold(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 10_000;
+}
 export type Selection = Scenario | "todos" | "diagnostico" | "restaurar" | "preparar_desvio" | "continuar_desvio" | "seguir_viaje" | "concurrencia";
 export type Factor = 1 | 20;
 export type StreamKey = "live" | "detour" | "infractions";
@@ -46,6 +50,7 @@ export interface Check {
 }
 export interface Run {
   id: string;
+  deviationThresholdMeters: number;
   target: Target;
   selection: Selection;
   factor: Factor;
@@ -157,6 +162,7 @@ export interface TrackingState {
   simulatedStartAt?: string;
   configuredDevices: {
     gpsId: number;
+    deviationThresholdMeters?: number;
     distanceMeters: number;
     configurationId?: string;
     preparation?: { stopAtMeters: number; durationSeconds: number; expectedPoints: number } | null;

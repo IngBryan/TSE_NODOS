@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { labels, scenarios } from "@/lib/types";
+import { labels, scenarios, DEFAULT_DEVIATION_THRESHOLD_METERS, validDeviationThreshold } from "@/lib/types";
 import type { Run, Selection, StreamKey, Target } from "@/lib/types";
 interface PublicProfile {
   id: Target;
@@ -52,6 +52,7 @@ export default function Home() {
     [error, setError] = useState(""),
     [connected, setConnected] = useState(true);
   const [balanzasOutage, setBalanzasOutage] = useState(true);
+  const [deviationThreshold, setDeviationThreshold] = useState(String(DEFAULT_DEVIATION_THRESHOLD_METERS));
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/control", { cache: "no-store" });
@@ -60,6 +61,9 @@ export default function Home() {
       setData(next);
       if (next.run && (next.running || next.run.cleanupRequired))
         setTarget(next.run.target);
+      if (next.run && (next.running || next.run.cleanupRequired)
+          && validDeviationThreshold(next.run.deviationThresholdMeters))
+        setDeviationThreshold(String(next.run.deviationThresholdMeters));
       setConnected(true);
     } catch {
       setConnected(false);
@@ -77,13 +81,19 @@ export default function Home() {
     setPending(true);
     setError("");
     try {
+      const configuringDetour = ["preparar_desvio", "desvio", "todos"].includes(selection);
+      const threshold = Number(deviationThreshold);
+      if (configuringDetour && !validDeviationThreshold(threshold))
+        throw new Error("Ingresá un umbral de desvío entero entre 1 y 10000 metros.");
       const r = await fetch("/api/control", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           selection === "stop"
             ? { action: "stop", ...(stream ? { stream } : {}) }
-            : { action: "start", target, selection, ...(["carga", "todos"].includes(selection) ? { balanzasOutage } : {}) },
+            : { action: "start", target, selection,
+              ...(configuringDetour ? { deviationThresholdMeters: threshold } : {}),
+              ...(["carga", "todos"].includes(selection) ? { balanzasOutage } : {}) },
         ),
       });
       const b = await r.json();
@@ -130,6 +140,13 @@ export default function Home() {
             <option value="elasticcloud">Elastic Cloud</option>
             <option value="local">Local</option>
           </select>
+        </label>
+        <label>
+          Umbral de desvío (m)
+          <input type="number" min={1} max={10000} step={1} value={deviationThreshold}
+            disabled={busy || !!run?.cleanupRequired}
+            onChange={e => setDeviationThreshold(e.target.value)} />
+          <span>Ingresá el valor configurado en Central.</span>
         </label>
         <div className="cadence">
           <strong>Mediciones GPS cada 5 s</strong>

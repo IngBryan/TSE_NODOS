@@ -1,102 +1,107 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# carga.uy — Simulador de Balanzas
 
-## Getting Started
+Ofrece una API REST de balanzas y pesajes que consulta el poller de Central.
+El panel simulador permite registrar pesajes y provocar indisponibilidad
+para comprobar la recuperación de las consultas.
 
-First, run the development server:
-```bash
-npm run dev
-```
+## Arranque y configuración
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## API mock (balanzas y pesajes)
-
-Datos en memoria (`src/lib/store.ts`), con algunos datos semilla. Se pierden al reiniciar.
-
-```ts
-Scale         { id, name, latitude, longitude, active }
-WeighingEvent { id, scaleId, licensePlate, datetime /* ISO 8601 */, weight /* kg */ }
-```
-
-| Metodo   | Ruta                           | Descripcion                                                       |
-|----------|--------------------------------|-------------------------------------------------------------------|
-| `GET`    | `/api/scales?active=`          | Lista balanzas (filtro opcional `true`/`false`)                   |
-| `POST`   | `/api/scales`                  | Alta. `active` por defecto `true`                                 |
-| `GET`    | `/api/scales/:id`              | Obtiene una balanza                                               |
-| `PUT`    | `/api/scales/:id`              | Modificacion (completa)                                           |
-| `DELETE` | `/api/scales/:id`              | Baja logica: pasa a `active: false` y devuelve la balanza. Sus pesajes se conservan |
-| `GET`    | `/api/scales/:id/weighings?from=&to=&licensePlate=` | Pesajes de una balanza en un rango de fechas (inclusive, ISO 8601). `from` y `to` obligatorios; `licensePlate` opcional. Tambien para balanzas dadas de baja |
-
-Errores: `{ "error": string, "details"?: string[] }` con `400`, `401` o `404`.
-
-### Autenticacion (OAuth 2.0 client credentials)
-
-Todos los endpoints de `/api` requieren `Authorization: Bearer <token>`, salvo
-`GET /api/health` y `POST /api/oauth/token`. La validacion la hace `src/proxy.ts`
-(en Next 16 `middleware.ts` se renombro a `proxy.ts`). Los tokens son JWT HS256 emitidos
-por el propio mock.
-
-#### Variables de entorno (obligatorias)
-
-No hay valores por defecto: si falta alguna, los endpoints protegidos y el de token
-responden `500` y el log indica cual falta.
-
-| Variable                  | Obligatoria | Descripcion                                          |
-|---------------------------|-------------|------------------------------------------------------|
-| `OAUTH_CLIENT_ID`         | Si          | `client_id` aceptado (ej. `componente-central`)      |
-| `OAUTH_CLIENT_SECRET`     | Si          | `client_secret` del cliente                          |
-| `JWT_SECRET`              | Si          | Clave para firmar los JWT (minimo 32 caracteres)     |
-| `OAUTH_TOKEN_TTL_SECONDS` | No          | Vida del token en segundos (por defecto `3600`)      |
-
-**Desarrollo (docker compose):** en el `.env` de la raiz del repo (`TSE_NODOS/.env`) estas
-variables van con prefijo `BALANZAS_` (`BALANZAS_OAUTH_CLIENT_ID`, `BALANZAS_JWT_SECRET`, ...)
-y el `docker-compose.yml` las mapea a los nombres de la tabla. Ver el README de la raiz.
-
-> Si se corre `npm run dev` directamente dentro de `balanzas/` (fuera de Docker), Next solo
-> lee los `.env` de esa carpeta: crear `balanzas/.env` con los nombres **sin** prefijo.
-
-**Produccion:** definirlas como variables de entorno del servidor donde se ejecuta
-`docker compose` (con prefijo) o directamente del contenedor (sin prefijo).
-
-#### Uso
-
-1. Obtener un token (credenciales por HTTP Basic, o `client_id`/`client_secret` en el body;
-   acepta `application/x-www-form-urlencoded` o JSON):
+El arranque completo de los nodos se documenta en el [README principal](../README.md).
+Para levantar únicamente Balanzas, desde la raíz de TSE_NODOS:
 
 ```bash
-curl -X POST localhost:3001/api/oauth/token \
-  -u "<BALANZAS_OAUTH_CLIENT_ID>:<BALANZAS_OAUTH_CLIENT_SECRET>" \
+docker compose up -d --build balanzas
+```
+
+API local: http://localhost:3001. Estado: `/api/health`.
+En el `.env` de TSE_NODOS configurar `BALANZAS_OAUTH_CLIENT_ID`,
+`BALANZAS_OAUTH_CLIENT_SECRET` y `BALANZAS_JWT_SECRET` (mínimo 32 caracteres).
+El cliente OAuth debe coincidir con el utilizado por Central y el panel.
+`BALANZAS_OAUTH_TOKEN_TTL_SECONDS` vale 3600 por defecto.
+
+Para desarrollo sin Docker, usar Node.js 24 y ejecutar `npm ci` y `npm run dev`
+desde esta carpeta. El servidor de desarrollo usa el puerto 3000.
+Crear `balanzas/.env` con `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` y `JWT_SECRET`,
+sin prefijo `BALANZAS_`; opcionalmente, `OAUTH_TOKEN_TTL_SECONDS`.
+
+## Autenticación
+
+OAuth2 mediante client credentials. Obtener un token con `POST /api/oauth/token`
+y enviarlo como `Authorization: Bearer <token>` en las llamadas protegidas.
+`/api/health` y `/api/oauth/token` no requieren Bearer.
+
+Ejemplo para Bash; desde PowerShell usar `curl.exe` en una sola línea:
+
+```bash
+curl -X POST http://localhost:3001/api/oauth/token \
+  -u "<client_id>:<client_secret>" \
   -d grant_type=client_credentials
-# { "access_token": "eyJ...", "token_type": "Bearer", "expires_in": 3600 }
 ```
 
-2. Usarlo, por ejemplo para obtener los pesajes de un vehiculo en la balanza 1 en una fecha:
+## API
+
+| Método | Ruta | Uso |
+|---|---|---|
+| GET | `/api/scales` | Listar; filtro opcional `active=true/false` |
+| POST | `/api/scales` | Crear una balanza |
+| GET | `/api/scales/:id` | Consultar una balanza |
+| PUT | `/api/scales/:id` | Modificar una balanza |
+| DELETE | `/api/scales/:id` | Baja lógica; conserva los pesajes |
+| GET | `/api/scales/:id/weighings` | Consultar pesajes |
+| POST | `/api/scales/:id/weighings` | Registrar un pesaje para demostración |
+| GET | `/api/simulation/availability` | Consultar la indisponibilidad simulada |
+| PUT | `/api/simulation/availability` | Activar o recuperar una indisponibilidad |
+
+La consulta de pesajes exige `from` y `to` en ISO 8601, con extremos incluidos.
+`licensePlate` permite filtrar por matrícula. También admite balanzas dadas de baja.
+Cada pesaje incluye `id`, `scaleId`, `licensePlate`, `datetime` y `weight` en kg.
+
+Para registrar un pesaje, enviar a una balanza activa:
+
+```json
+{"licensePlate":"STU5678","weight":50000}
+```
+
+El nodo genera la fecha y devuelve el recibo con HTTP 201. `weight` debe ser
+un entero positivo; la matrícula normalizada debe tener entre 6 y 8 caracteres
+alfanuméricos. El panel usa el recibo para comprobar esa evidencia en Central.
+
+Los errores de la API incluyen `error` y, cuando corresponde, `details`.
+Se utilizan 400 por datos inválidos, 401 por autenticación, 404 por recurso
+inexistente, 409 por conflictos y 503 durante la indisponibilidad simulada.
+El endpoint OAuth devuelve los errores `invalid_client`, `invalid_request`
+o `unsupported_grant_type` según corresponda.
+
+## Caída y recuperación
+
+Enviar a `PUT /api/simulation/availability`:
+
+```json
+{"outageId":"demo-carga-1","durationSeconds":180}
+```
+
+Durante la caída, `/api/scales` y sus subrutas responden 503 con `Retry-After`.
+OAuth, health y el control de simulación siguen disponibles. Los datos permanecen
+intactos: es una indisponibilidad de la API de datos, no un apagado del proceso.
+
+Para recuperar anticipadamente, enviar el mismo `outageId` y `durationSeconds: 0`.
+Otra ejecución no puede recuperar esa caída. Repetir la activación no prolonga
+su vencimiento. La duración máxima es de 180 segundos.
+
+El panel registra un pesaje, comprueba un intento fallido del poller y, tras la
+recuperación, verifica que Central reciba el pesaje original sin volver a crearlo.
+El cron de Central conserva su periodicidad.
+
+## Datos y pruebas
+
+Las balanzas, los pesajes y las fallas simuladas se almacenan en memoria.
+Al reiniciar se restablecen los datos iniciales. Usar una sola instancia del simulador.
+
+Desde esta carpeta:
 
 ```bash
-curl "localhost:3001/api/scales/1/weighings?licensePlate=SBC1234&from=2026-09-29T00:00:00Z&to=2026-09-29T23:59:59Z" \
-  -H "Authorization: Bearer <access_token>"
+npm ci
+npm test
+npm run lint
+npm run build
 ```
-
-Errores del token endpoint segun RFC 6749: `{ "error": "invalid_client" | "invalid_request" | "unsupported_grant_type", "error_description": string }`.
-
-### Indisponibilidad controlada para demostraciones
-
-`GET /api/simulation/availability` consulta el estado y `PUT` recibe
-`{ "outageId": "identificador-de-ejecucion", "durationSeconds": 180 }` para activar una caída
-de hasta 180 segundos. Ambos requieren el mismo OAuth que la API de Balanzas. `durationSeconds: 0`
-recupera la caída del mismo identificador; otra ejecución no puede levantarla ni reemplazarla.
-Repetir una activación con el mismo identificador no prolonga el vencimiento.
-
-Durante la caída, todos los métodos de `/api/scales` y sus subrutas responden **503** con
-`Retry-After` y sin caché. No se borran ni se generan pesajes. OAuth, el control y `/api/health`
-continúan operativos: se simula indisponibilidad del servicio de datos, no una caída del proceso.
-El estado contabiliza las peticiones rechazadas y las consultas GET de pesajes rechazadas, para
-comprobar que el poller realmente intentó consultarlas. Al vencer el plazo se recupera automáticamente.
-
-El panel registra un pesaje, provoca esta caída, ejecuta un poll fallido y otro tras recuperarlo,
-y verifica el recibo original en Central sin reenviarlo. El estado de caída es en memoria, igual
-que los pesajes: usar una sola réplica/proceso del simulador.

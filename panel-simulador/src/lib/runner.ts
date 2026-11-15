@@ -9,7 +9,7 @@ import { profile, missing, publicProfiles } from "./config.ts";
 import { evidenceDates, freshEvidence } from "./evidence.ts";
 import { checkPoller, poller } from "./poller.ts";
 import { acquire, release, save, recover, load } from "./store.ts";
-import { caseTypes, labels, scenarios } from "./types.ts";
+import { caseTypes, labels, scenarios, DEFAULT_DEVIATION_THRESHOLD_METERS, validDeviationThreshold } from "./types.ts";
 import type {
   Run,
   Target,
@@ -524,7 +524,10 @@ async function execute(run: Run, p: Profile, signal: AbortSignal) {
     g.panelJob = undefined;
   }
 }
-export function start(target: Target, selection: Selection, balanzasOutage = false) {
+export function start(target: Target, selection: Selection, balanzasOutage = false,
+    deviationThresholdMeters = DEFAULT_DEVIATION_THRESHOLD_METERS) {
+  if (!validDeviationThreshold(deviationThresholdMeters))
+    throw new Error("El umbral de desvío debe ser un entero entre 1 y 10000 metros.");
   if (balanzasOutage && !["carga", "todos"].includes(selection))
     throw new Error("La interrupción de Balanzas se prueba con carga o con todos los casos.");
   if (g.panelJob) {
@@ -554,6 +557,8 @@ export function start(target: Target, selection: Selection, balanzasOutage = fal
   )
     throw new Error("Seleccionar el ambiente de la ejecución pendiente.");
   const p = profile(target);
+  if (["continuar_desvio", "concurrencia"].includes(selection))
+    deviationThresholdMeters = previous?.deviationThresholdMeters ?? DEFAULT_DEVIATION_THRESHOLD_METERS;
   if (missing(p).length)
     throw new Error("Faltan credenciales privadas del ambiente.");
   acquire();
@@ -567,6 +572,7 @@ export function start(target: Target, selection: Selection, balanzasOutage = fal
           : [];
     const run: Run = {
       id: crypto.randomUUID(),
+      deviationThresholdMeters,
       target,
       selection,
       factor: selection === "preparar_desvio" ? 20 : 1,

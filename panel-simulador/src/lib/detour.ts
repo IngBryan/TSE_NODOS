@@ -55,7 +55,10 @@ export async function prepareDetour(run: Run, p: Profile, signal: AbortSignal, l
   const { configuration: configured } = await c.node<{ configuration: TrackingState["configuredDevices"][number] }>(
     "tracking", `/api/gps-devices/${p.gpsWithGuide}/scenario`, "PUT", {
       scenario: "DESVIO", authorizedRoutes: [line], deviationRoute: route,
+      deviationThresholdMeters: run.deviationThresholdMeters,
     });
+  if (configured.deviationThresholdMeters !== run.deviationThresholdMeters)
+    throw new Error("Tracking no confirmó el umbral de desvío indicado. Actualizar el nodo.");
   const plan = configured.preparation;
   if (!plan || !configured.configurationId)
     throw new Error("El recorrido no tiene un tramo inicial común suficiente con A. Cambiar el punto de desvío.");

@@ -1,5 +1,6 @@
 import { sameOrigin } from "@/lib/origin";
 import { start, stop, view } from "@/lib/runner";
+import { validDeviationThreshold } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET() {
@@ -32,6 +33,8 @@ export async function POST(request: Request) {
       );
     if (b.balanzasOutage !== undefined && typeof b.balanzasOutage !== "boolean")
       return Response.json({ error: "La opción de indisponibilidad debe ser booleana." }, { status: 400 });
+    if (b.deviationThresholdMeters !== undefined && !validDeviationThreshold(b.deviationThresholdMeters))
+      return Response.json({ error: "El umbral de desvío debe ser un entero entre 1 y 10000 metros." }, { status: 400 });
     if (
       b.action !== "start" ||
       !["local", "elasticcloud"].includes(b.target) ||
@@ -53,7 +56,7 @@ export async function POST(request: Request) {
         { error: "Acción, ambiente o escenario inválido." },
         { status: 400 },
       );
-    return Response.json(start(b.target, b.selection, b.balanzasOutage ?? false), {
+    return Response.json(start(b.target, b.selection, b.balanzasOutage ?? false, b.deviationThresholdMeters), {
       status: 202,
     });
   } catch (e) {
