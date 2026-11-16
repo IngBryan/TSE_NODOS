@@ -10,21 +10,24 @@ interface RabbitConfig {
   port: number;
   username: string;
   password: string;
+  tls: boolean;
 }
 
 export function getRabbitConfig(): RabbitConfig {
-  const { RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASSWORD } = process.env;
+  const { RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASSWORD, RABBITMQ_TLS } = process.env;
   const missing = Object.entries({ RABBITMQ_HOST, RABBITMQ_USER, RABBITMQ_PASSWORD })
     .filter(([, value]) => !value)
     .map(([key]) => key);
   if (missing.length) {
     throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
   }
+  const tls = RABBITMQ_TLS === "true";
   return {
     hostname: RABBITMQ_HOST!,
-    port: Number(RABBITMQ_PORT) || 5672,
+    port: Number(RABBITMQ_PORT) || (tls ? 5671 : 5672),
     username: RABBITMQ_USER!,
     password: RABBITMQ_PASSWORD!,
+    tls,
   };
 }
 
@@ -38,7 +41,12 @@ interface Connection {
 const g = globalThis as unknown as { __trackingRabbit?: Promise<Connection> };
 
 async function open(onClose: () => void): Promise<Connection> {
-  const model = await connect({ protocol: "amqp", ...getRabbitConfig(), vhost: "/" }, { timeout: 5000 });
+  const { tls, ...rabbitConfig } = getRabbitConfig();
+  const model = await connect(
+    { protocol: tls ? "amqps" : "amqp", ...rabbitConfig, vhost: "/" },
+    // El certificado del broker de Central es autofirmado: no se valida la cadena.
+    { timeout: 5000, ...(tls ? { rejectUnauthorized: false } : {}) },
+  );
   model.on("error", (err) => console.error("[rabbitmq] connection error:", err.message));
   model.on("close", onClose);
   try {

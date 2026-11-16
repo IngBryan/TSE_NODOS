@@ -23,8 +23,9 @@ Configurar las siguientes variables en el `.env` de TSE_NODOS:
 | `TRACKING_JWT_SECRET` | Firma de tokens; mínimo 32 caracteres |
 | `TRACKING_OAUTH_TOKEN_TTL_SECONDS` | Vigencia del token; 3600 segundos por defecto |
 | `RABBITMQ_HOST` | `host.docker.internal` para ejecución local con Docker |
-| `RABBITMQ_PORT` | Puerto AMQP; 5672 por defecto |
+| `RABBITMQ_PORT` | Puerto AMQP; 5672 por defecto (5671 si `RABBITMQ_TLS=true`) |
 | `RABBITMQ_USER`, `RABBITMQ_PASSWORD` | Credenciales del broker de Central |
+| `RABBITMQ_TLS` | `true` para conectar por AMQPS; `false` por defecto |
 | `TRACKING_INTERVAL_SECONDS` | Intervalo GPS; 5 segundos por defecto |
 | `TRACKING_SPEED_KMH` | Velocidad simulada; 80 km/h por defecto |
 
