@@ -43,7 +43,12 @@ const g = globalThis as unknown as { __trackingRabbit?: Promise<Connection> };
 async function open(onClose: () => void): Promise<Connection> {
   const { tls, ...rabbitConfig } = getRabbitConfig();
   const model = await connect(
-    { protocol: tls ? "amqps" : "amqp", ...rabbitConfig, vhost: "/" },
+    {
+      protocol: tls ? "amqps" : "amqp",
+      ...rabbitConfig,
+      vhost: "/",
+      clientProperties: { connection_name: "tracking_openshift" },
+    },
     // El certificado del broker de Central es autofirmado: no se valida la cadena.
     { timeout: 5000, ...(tls ? { rejectUnauthorized: false } : {}) },
   );
